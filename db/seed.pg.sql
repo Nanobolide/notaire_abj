@@ -1,31 +1,23 @@
--- =============================================================
--- NOTARIA — Données d'initialisation (référentiels + comptes démo)
--- AUCUNE donnée des fichiers Excel n'est migrée : registres vides.
--- =============================================================
+-- NOTARIA — Données d'initialisation PostgreSQL
 
--- Étude pilote
 INSERT INTO etudes (id, nom, adresse, email_gmail_notaire, email_gmail_partage)
 VALUES ('11111111-1111-1111-1111-111111111111',
         'Étude de Me KOUASSI MARLENE K. ELISEE',
         'Abidjan, Côte d''Ivoire',
         'notaire.kouassi@gmail.com',
         'etude.kouassi@gmail.com')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (id) DO NOTHING;
 
--- Comptes de démonstration — MOTS DE PASSE À CHANGER À LA 1re CONNEXION
--- hash ci-dessous = bcrypt de « ChangezMoi2026! »
-INSERT INTO utilisateurs (etude_id, role, identifiant, nom_affiche, fonction, email_rattachement, hash_mot_de_passe, doit_changer_mdp)
+INSERT INTO utilisateurs (id, etude_id, role, identifiant, nom_affiche, fonction, email_rattachement, hash_mot_de_passe, doit_changer_mdp)
 VALUES
-('11111111-1111-1111-1111-111111111111','admin_etude','notaire','Me KOUASSI M. K. ELISEE','Notaire','notaire.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
-('11111111-1111-1111-1111-111111111111','collaborateur','secretariat','Secrétariat','Secrétariat','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
-('11111111-1111-1111-1111-111111111111','collaborateur','clerc1','Clerc 1','Clerc 1','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
-('11111111-1111-1111-1111-111111111111','collaborateur','accueil','Accueil','Accueil','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true)
-ON CONFLICT DO NOTHING;
+('a0000001-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','admin_etude','notaire','Me KOUASSI M. K. ELISEE','Notaire','notaire.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
+('a0000002-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','secretariat','Secrétariat','Secrétariat','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
+('a0000003-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','clerc1','Clerc 1','Clerc 1','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
+('a0000004-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','accueil','Accueil','Accueil','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true)
+ON CONFLICT (etude_id, identifiant) DO NOTHING;
 
--- Référentiels par défaut de l'étude pilote
-WITH e AS (SELECT '11111111-1111-1111-1111-111111111111'::uuid AS id)
 INSERT INTO referentiels (etude_id, type_liste, valeur, ordre)
-SELECT e.id, l.type_liste, l.valeur, l.ordre FROM e, (VALUES
+SELECT '11111111-1111-1111-1111-111111111111'::uuid, l.type_liste, l.valeur, l.ordre FROM (VALUES
   ('type_flux','Appel Téléphonique',1),('type_flux','Courrier Physique',2),('type_flux','Courrier Électronique',3),
   ('destinataire','Le Notaire',1),('destinataire','Clerc 1',2),('destinataire','Clerc 2',3),('destinataire','Clerc 3',4),
   ('destinataire','Comptabilité',5),('destinataire','Formaliste',6),('destinataire','Accueil',7),
@@ -47,4 +39,9 @@ SELECT e.id, l.type_liste, l.valeur, l.ordre FROM e, (VALUES
   ('conservation_fonciere','RIVIERA',22),('conservation_fonciere','SAN PEDRO',23),('conservation_fonciere','SEGUELA',24),
   ('conservation_fonciere','SONGON',25),('conservation_fonciere','TREICHVILLE',26),('conservation_fonciere','YAMOUSSOUKRO',27),
   ('conservation_fonciere','YOPOUGON 1',28),('conservation_fonciere','YOPOUGON 2',29)
-) AS l(type_liste, valeur, ordre);
+) AS l(type_liste, valeur, ordre)
+WHERE NOT EXISTS (
+  SELECT 1 FROM referentiels r
+  WHERE r.etude_id = '11111111-1111-1111-1111-111111111111'::uuid
+    AND r.type_liste = l.type_liste AND r.valeur = l.valeur
+);

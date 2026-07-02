@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
-import { withTenant, audit } from "@/lib/db";
+import { withTenant, audit, newId } from "@/lib/db";
+import { isPg, sqlAppelsInsert, sqlAppelsNumero } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
     const s = exigerSession();
     const p = new URL(req.url).searchParams;
-    const filtres = []; const valeurs = [];
+    const filtres = [];
+    const valeurs = [s.etudeId];
     const ajouter = (sql, v) => { valeurs.push(v); filtres.push(sql.replace("?", "$" + valeurs.length)); };
     if (p.get("statut")) ajouter("statut_traitement = ?", p.get("statut"));
     if (p.get("motif")) ajouter("motif = ?", p.get("motif"));
@@ -18,7 +20,7 @@ export async function GET(req) {
       (await c.query(
         `SELECT a.*, u.nom_affiche AS saisi_par_nom FROM appels_courriers a
          LEFT JOIN utilisateurs u ON u.id = a.saisi_par
-         WHERE a.supprime_le IS NULL ${where}
+         WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}
          ORDER BY a.annee DESC, a.numero DESC`, valeurs)).rows);
     return NextResponse.json(rows);
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
@@ -31,19 +33,23 @@ export async function POST(req) {
     if (!d.client_nom || !d.type_flux)
       return NextResponse.json({ erreur: "Nom du client et type de flux obligatoires." }, { status: 400 });
     const ligne = await withTenant(s.etudeId, async (c) => {
-      const { rows } = await c.query(
-        `INSERT INTO appels_courriers
-          (etude_id, numero, type_flux, date_entree, heure, reference_dossier, client_nom,
-           telephone, email, destinataire, mis_en_relation, motif, statut_traitement,
-           nb_tentatives, observations, saisi_par)
-         VALUES ($1, prochain_numero_appel($1), $2,
-                 COALESCE($3::date, CURRENT_DATE), COALESCE($4::time, LOCALTIME),
-                 $5,$6,$7,$8,$9,$10,$11,COALESCE($12,'Non commencé'),COALESCE($13,0),$14,$15)
-         RETURNING *`,
-        [s.etudeId, d.type_flux, d.date_entree || null, d.heure || null, d.reference_dossier || null,
-         d.client_nom, d.telephone || null, d.email || null, d.destinataire || null,
-         d.mis_en_relation ?? null, d.motif || null, d.statut_traitement, d.nb_tentatives,
-         d.observations || null, s.uid]);
+      let rows;
+      if (isPg()) {
+        ({ rows } = await c.query(sqlAppelsInsert(), [
+          s.etudeId, d.type_flux, d.date_entree || null, d.heure || null, d.reference_dossier || null,
+          d.client_nom, d.telephone || null, d.email || null, d.destinataire || null,
+          d.mis_en_relation ?? null, d.motif || null, d.statut_traitement, d.nb_tentatives,
+          d.observations || null, s.uid
+        ]));
+      } else {
+        const { rows: numRows } = await c.query(sqlAppelsNumero(), [s.etudeId]);
+        ({ rows } = await c.query(sqlAppelsInsert(), [
+          newId(), s.etudeId, numRows[0].n, d.type_flux, d.date_entree || null, d.heure || null,
+          d.reference_dossier || null, d.client_nom, d.telephone || null, d.email || null,
+          d.destinataire || null, d.mis_en_relation ?? null, d.motif || null, d.statut_traitement,
+          d.nb_tentatives, d.observations || null, s.uid
+        ]));
+      }
       await audit(c, { etudeId: s.etudeId, table: "appels_courriers", ligneId: rows[0].id,
         action: "creation", apres: rows[0], utilisateur: s.uid });
       return rows[0];
