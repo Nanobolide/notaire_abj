@@ -10,7 +10,10 @@ export function creerSession(user) {
     process.env.JWT_SECRET,
     { expiresIn: DUREE_SESSION }
   );
-  cookies().set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION });
+  cookies().set(COOKIE, token, {
+    httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION,
+    secure: process.env.NODE_ENV === "production",
+  });
 }
 
 export function fermerSession() {
