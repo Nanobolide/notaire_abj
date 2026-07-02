@@ -1,0 +1,21 @@
+{
+  "name": "notaria-saas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plateforme SaaS multi-études de gestion notariale — socle V1 (étude pilote Me KOUASSI)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql && psql \"$DATABASE_URL\" -f db/seed.sql",
+    "test:isolation": "node tests/isolation.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "next": "14.2.5",
+    "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

@@ -1,0 +1,86 @@
+/* NOTARIA — outil métier : lisibilité et densité avant tout.
+   Palette institutionnelle : bleu notarial + or discret. */
+:root {
+  --bleu: #1F3864;
+  --bleu-clair: #2E5596;
+  --or: #B8912F;
+  --fond: #F6F7FA;
+  --trait: #D9DEE8;
+  --texte: #1A2233;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fond); color: var(--texte);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 14px;
+}
+a { color: var(--bleu-clair); text-decoration: none; }
+
+.entete {
+  background: var(--bleu); color: #fff; padding: 10px 20px;
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.entete .marque { font-size: 17px; font-weight: 700; letter-spacing: 2px; }
+.entete .marque span { color: var(--or); }
+.entete nav { display: flex; gap: 4px; }
+.entete nav a {
+  color: #D7E0F0; padding: 6px 12px; border-radius: 4px; font-weight: 600;
+}
+.entete nav a:hover, .entete nav a.actif { background: var(--bleu-clair); color: #fff; }
+.entete .session { margin-left: auto; font-size: 12.5px; color: #C9D4E8; }
+
+.page { max-width: 1280px; margin: 0 auto; padding: 20px; }
+h1 { font-size: 20px; color: var(--bleu); margin: 0 0 4px; }
+.sous-titre { color: #5A6478; margin: 0 0 16px; font-size: 13px; }
+
+.carte {
+  background: #fff; border: 1px solid var(--trait); border-radius: 8px;
+  padding: 16px; margin-bottom: 16px;
+}
+.compteurs { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.compteur { background: #fff; border: 1px solid var(--trait); border-left: 4px solid var(--bleu); border-radius: 8px; padding: 12px 14px; }
+.compteur .valeur { font-size: 26px; font-weight: 700; color: var(--bleu); }
+.compteur .libelle { font-size: 12px; color: #5A6478; }
+.compteur.alerte { border-left-color: #C0392B; }
+.compteur.alerte .valeur { color: #C0392B; }
+.compteur.argent { border-left-color: var(--or); }
+.compteur.argent .valeur { color: var(--or); font-size: 20px; }
+
+table.registre { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; }
+table.registre th {
+  background: var(--bleu); color: #fff; padding: 7px 8px; text-align: left;
+  position: sticky; top: 0; font-size: 12px; white-space: nowrap;
+}
+table.registre td { padding: 6px 8px; border-bottom: 1px solid var(--trait); }
+table.registre tr:hover td { filter: brightness(0.97); }
+.legende { font-size: 12px; color: #5A6478; margin: 8px 0; }
+.pastille { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid #BBB; vertical-align: -2px; margin: 0 3px 0 10px; }
+
+form.saisie { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+form.saisie label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: #3A4560; }
+form.saisie input, form.saisie select, form.saisie textarea {
+  padding: 7px 8px; border: 1px solid var(--trait); border-radius: 5px; font: inherit; background: #fff;
+}
+form.saisie textarea { grid-column: 1 / -1; min-height: 50px; }
+.bouton {
+  background: var(--bleu); color: #fff; border: 0; border-radius: 5px;
+  padding: 9px 18px; font-weight: 700; cursor: pointer; font: inherit;
+}
+.bouton:hover { background: var(--bleu-clair); }
+.bouton.secondaire { background: #fff; color: var(--bleu); border: 1px solid var(--bleu); }
+.erreur { color: #C0392B; font-weight: 600; margin: 8px 0; }
+.filtres { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.filtres select, .filtres input { padding: 6px 8px; border: 1px solid var(--trait); border-radius: 5px; font: inherit; }
+
+.connexion-fond {
+  min-height: 100vh; display: grid; place-items: center;
+  background: linear-gradient(160deg, var(--bleu) 0%, #101E38 100%);
+}
+.connexion-boite { background: #fff; border-radius: 10px; padding: 32px; width: min(400px, 92vw); }
+.connexion-boite h1 { letter-spacing: 2px; }
+.connexion-boite form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.connexion-boite input { padding: 10px; border: 1px solid var(--trait); border-radius: 6px; font: inherit; }
+
+@media (max-width: 700px) {
+  .page { padding: 10px; }
+  table.registre { font-size: 12px; display: block; overflow-x: auto; white-space: nowrap; }
+}
