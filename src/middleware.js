@@ -14,6 +14,7 @@ export function middleware(req) {
   const session = req.cookies.get("notaria_session");
   const { pathname } = req.nextUrl;
   const publique = pathname === "/connexion" || pathname === "/changer-mot-de-passe"
+    || pathname === "/api/health"
     || pathname.startsWith("/api/auth");
 
   if (!session && !publique)

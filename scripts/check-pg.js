@@ -1,13 +1,11 @@
 /** Vérifie la connexion PostgreSQL (lecture seule). Usage : DATABASE_URL=... node scripts/check-pg.js */
 const { Client } = require("pg");
+const pgSslOptions = require("./pg-ssl");
 const url = process.env.DATABASE_URL;
 if (!url) { console.error("DATABASE_URL manquant"); process.exit(1); }
 
 (async () => {
-  const c = new Client({
-    connectionString: url,
-    ssl: url.includes("render.com") ? { rejectUnauthorized: false } : undefined,
-  });
+  const c = new Client({ connectionString: url, ssl: pgSslOptions(url) });
   await c.connect();
   console.log("✅ Connexion PostgreSQL OK");
   const tables = await c.query(

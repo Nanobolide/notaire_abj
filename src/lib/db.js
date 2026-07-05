@@ -12,7 +12,10 @@ let sqlite;
 
 function pgSsl() {
   const url = process.env.DATABASE_URL || "";
-  return url.includes("render.com") ? { rejectUnauthorized: false } : undefined;
+  if (/render\.com|sslmode=require|ssl=true/i.test(url)) {
+    return { rejectUnauthorized: false };
+  }
+  return undefined;
 }
 
 function getSqlite() {

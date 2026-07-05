@@ -1,25 +1,49 @@
 /**
- * Migration — PostgreSQL si DATABASE_URL, sinon SQLite local.
+ * Migration — PostgreSQL si DATABASE_URL (Render), sinon SQLite local.
+ * Idempotent : CREATE IF NOT EXISTS / ON CONFLICT DO NOTHING.
  */
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const pgSslOptions = require("./pg-ssl");
 
 const ROOT = path.join(__dirname, "..");
+
+async function connectWithRetry(client, attempts = 5) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      await client.connect();
+      return;
+    } catch (err) {
+      if (i === attempts) throw err;
+      const wait = i * 2000;
+      console.log(`→ Connexion PostgreSQL échouée (${i}/${attempts}) : ${err.message}`);
+      console.log(`→ Nouvelle tentative dans ${wait / 1000}s…`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
 
 async function migratePg() {
   const { Client } = require("pg");
   const url = process.env.DATABASE_URL;
-  const client = new Client({
-    connectionString: url,
-    ssl: url.includes("render.com") ? { rejectUnauthorized: false } : undefined,
-  });
-  await client.connect();
-  console.log("→ PostgreSQL (production)");
+  if (!url) throw new Error("DATABASE_URL manquant pour la migration PostgreSQL.");
+
+  const client = new Client({ connectionString: url, ssl: pgSslOptions(url) });
+  await connectWithRetry(client);
+  console.log("→ PostgreSQL (production Render)");
+
   for (const file of ["db/schema.pg.sql", "db/seed.pg.sql"]) {
+    const sql = fs.readFileSync(path.join(ROOT, file), "utf8");
     console.log(`→ ${file}`);
-    await client.query(fs.readFileSync(path.join(ROOT, file), "utf8"));
+    try {
+      await client.query(sql);
+    } catch (err) {
+      console.error(`Erreur dans ${file} :`, err.message);
+      throw err;
+    }
   }
+
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
 }

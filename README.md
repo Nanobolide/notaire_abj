@@ -36,8 +36,25 @@ Comptes de démonstration (mot de passe : `ChangezMoi2026!`) :
 
 ## Production (Render + PostgreSQL)
 
-Sur Render, définir `DATABASE_URL` (PostgreSQL), `JWT_SECRET` et `NODE_ENV=production`.
-Le build exécute automatiquement `scripts/migrate.js` avec `db/schema.pg.sql` et `db/seed.pg.sql`.
+Le déploiement est configuré via `render.yaml` :
+
+| Variable | Source |
+|---|---|
+| `DATABASE_URL` | PostgreSQL Render (lié automatiquement) |
+| `JWT_SECRET` | Généré par Render |
+| `NODE_ENV` | `production` |
+| `PORT` | Injecté par Render |
+
+**Flux de déploiement** :
+1. Push sur `main` → Render lance le build (`npm run build`)
+2. Au démarrage (`npm start`), `prestart` exécute la migration PostgreSQL (`schema.pg.sql` + `seed.pg.sql`)
+3. Sonde de santé : `GET /api/health`
+
+Vérifier la base après déploiement :
+
+```bash
+DATABASE_URL="postgresql://..." node scripts/check-pg.js
+```
 
 Données de démonstration (PostgreSQL uniquement) :
 

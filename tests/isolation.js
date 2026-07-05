@@ -7,6 +7,7 @@
 const path = require("path");
 const { randomUUID } = require("crypto");
 
+const pgSslOptions = require("../scripts/pg-ssl");
 const isPg = !!process.env.DATABASE_URL;
 const A = "11111111-1111-1111-1111-111111111111";
 const B = "bbbbbbbb-0000-0000-0000-000000000002";
@@ -17,7 +18,7 @@ async function getClient() {
     const url = process.env.DATABASE_URL;
     const pool = new Pool({
       connectionString: url,
-      ssl: url.includes("render.com") ? { rejectUnauthorized: false } : undefined,
+      ssl: pgSslOptions(url),
     });
     return { pool, query: (sql, p) => pool.query(sql, p), end: () => pool.end() };
   }
