@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { exigerSession } from "@/lib/auth";
+import { exigerSession, estAdmin } from "@/lib/auth";
 import { withTenant, audit, newId } from "@/lib/db";
 import { isPg, sqlActesInsert, sqlActesList, sqlPartiesInsert } from "@/lib/dialect";
 
@@ -18,7 +18,11 @@ export async function GET(req) {
     const where = filtres.length ? " AND " + filtres.join(" AND ") : "";
     const rows = await withTenant(s.etudeId, async (c) =>
       (await c.query(`${sqlActesList()} ${where} ORDER BY a.date_ouverture DESC`, valeurs)).rows);
-    return NextResponse.json(rows);
+    const visibles = estAdmin(s) ? rows : rows.map((r) => {
+      const { valeur_acte, honoraires_totaux, montant_regle, statut_paiement, ...reste } = r;
+      return reste;
+    });
+    return NextResponse.json(visibles);
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
 
@@ -26,8 +30,16 @@ export async function POST(req) {
   try {
     const s = exigerSession();
     const d = await req.json();
+    if (!estAdmin(s))
+      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
+    if (!d.date_echeance) {
+      const base = d.date_ouverture ? new Date(d.date_ouverture) : new Date();
+      const jours = d.nature_acte === "Succession" ? 180 : d.complexite === "Simple" ? 20 : 30;
+      base.setDate(base.getDate() + jours);
+      d.date_echeance = base.toISOString().slice(0, 10);
+    }
     const ligne = await withTenant(s.etudeId, async (c) => {
       const params = isPg()
         ? [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Plateforme SaaS multi-études de gestion notariale — socle V1 (étude pilote Me KOUASSI)",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/migrate.js && next dev",
     "build": "node scripts/migrate.js && next build",
     "start": "next start",
     "db:migrate": "node scripts/migrate.js",

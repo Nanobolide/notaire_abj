@@ -1,23 +1,32 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Entete from "@/components/Entete";
-import { couleurAppel, joursEcoules, alerteSla } from "@/lib/regles";
+import { lireJson } from "@/lib/http";
+import { couleurAppel, joursEcoules, niveauAppel } from "@/lib/regles";
 
 const VIDE = { type_flux: "Appel Téléphonique", client_nom: "", telephone: "", email: "",
   reference_dossier: "", destinataire: "", mis_en_relation: "", motif: "",
   statut_traitement: "Non commencé", nb_tentatives: 0, observations: "" };
 
-export default function Appels() {
+export default function Page() {
+  return <Suspense><Appels /></Suspense>;
+}
+
+function Appels() {
+  const vueInitiale = useSearchParams().get("vue") === "registre" ? "registre" : "formulaire";
+  const [vue, setVue] = useState(vueInitiale);
   const [lignes, setLignes] = useState([]);
   const [refs, setRefs] = useState({});
   const [form, setForm] = useState(VIDE);
   const [filtres, setFiltres] = useState({ statut: "", motif: "", destinataire: "" });
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
 
   const charger = useCallback(async () => {
     const q = new URLSearchParams(Object.entries(filtres).filter(([, v]) => v));
     const rep = await fetch("/api/appels?" + q);
-    const data = await rep.json();
+    const data = await lireJson(rep);
     if (rep.ok) setLignes(data); else setErreur(data.erreur);
   }, [filtres]);
 
@@ -35,9 +44,9 @@ export default function Appels() {
         mis_en_relation: form.mis_en_relation === "" ? null : form.mis_en_relation === "Oui",
         nb_tentatives: Number(form.nb_tentatives) || 0 }),
     });
-    const data = await rep.json();
+    const data = await lireJson(rep);
     if (!rep.ok) { setErreur(data.erreur); return; }
-    setForm(VIDE); charger();
+    setForm(VIDE); charger(); setVue("registre");
   };
 
   const changerStatut = async (id, statut) => {
@@ -61,10 +70,15 @@ export default function Appels() {
       <main className="page">
         <h1>Journal des Appels et Courriers</h1>
         <p className="sous-titre">
-          Alerte automatique 72 h — toute demande d'appel non résolue en 3 jours est signalée en rouge.
-          Courriers : délai de 5 jours.
+          Délais unifiés appels et courriers : ⚠ à suivre après 3 jours, 🚨 urgent après 5 jours, critique (rouge) après 10 jours.
         </p>
 
+        <div className="onglets">
+          <button className={vue === "formulaire" ? "actif" : ""} onClick={() => setVue("formulaire")}>➕ Nouvelle entrée</button>
+          <button className={vue === "registre" ? "actif" : ""} onClick={() => setVue("registre")}>📋 Registre ({lignes.length})</button>
+        </div>
+
+        {vue === "formulaire" && (
         <div className="carte">
           <h1 style={{ fontSize: 15 }}>Nouvelle entrée</h1>
           <form className="saisie" onSubmit={enregistrer}>
@@ -104,29 +118,26 @@ export default function Appels() {
           </p>
         </div>
 
+        )}
+
+        {vue === "registre" && (<>
+        <p className="bareme">Barème : <span className="p" style={{background:"#FFF4C2"}}/> &gt; 3 j <span className="p" style={{background:"#FFD9A0"}}/> &gt; 5 j <span className="p" style={{background:"#FF9E9E"}}/> &gt; 10 j <span className="p" style={{background:"#E9F7EC"}}/> Résolu</p>
         <div className="filtres">
+          <input type="search" placeholder="🔍 Rechercher (client, dossier, téléphone…)" value={recherche}
+                 onChange={(e) => setRecherche(e.target.value)} style={{ minWidth: 240 }} />
           {sel("statut_traitement", filtres.statut, (e) => setFiltres({ ...filtres, statut: e.target.value }), "Tous statuts")}
           {sel("motif", filtres.motif, (e) => setFiltres({ ...filtres, motif: e.target.value }), "Tous motifs")}
           {sel("destinataire", filtres.destinataire, (e) => setFiltres({ ...filtres, destinataire: e.target.value }), "Tous destinataires")}
         </div>
 
-        <div className="legende">
-          Légende :
-          <span className="pastille" style={{ background: "#D6F5D6" }} /> Résolu
-          <span className="pastille" style={{ background: "#FFFFFF" }} /> 0-3 j
-          <span className="pastille" style={{ background: "#C9F0F0" }} /> &gt;3 j
-          <span className="pastille" style={{ background: "#FFF3B0" }} /> &gt;7 j
-          <span className="pastille" style={{ background: "#FFD9B3" }} /> &gt;14 j
-          <span className="pastille" style={{ background: "#F4A460" }} /> &gt;30 j
-          <span className="pastille" style={{ background: "#FFC7CE" }} /> &gt;60 j / 🚨 72 h / ≥3 tentatives
-        </div>
+        
 
         <table className="registre">
           <thead>
             <tr>
               <th>N°</th><th>Date</th><th>Heure</th><th>Réf. dossier</th><th>Client</th>
               <th>Contact</th><th>Destinataire</th><th>Motif</th><th>Statut</th>
-              <th>Tent.</th><th>Jours</th><th>🚨 72 h</th><th>Saisi par</th>
+              <th>Tent.</th><th>Jours</th><th>🚨 Alerte</th><th>Saisi par</th>
             </tr>
           </thead>
           <tbody>
@@ -134,7 +145,12 @@ export default function Appels() {
               <tr><td colSpan={13} style={{ textAlign: "center", color: "#5A6478", padding: 20 }}>
                 Registre vide — enregistrez votre première entrée ci-dessus.</td></tr>
             )}
-            {lignes.map((l) => {
+            {lignes.filter((l) => {
+              if (!recherche.trim()) return true;
+              const t = recherche.toLowerCase();
+              return [l.client_nom, l.reference_dossier, l.telephone, l.email]
+                .some((v) => (v || "").toLowerCase().includes(t));
+            }).map((l) => {
               const c = couleurAppel(l);
               return (
                 <tr key={l.id} style={{ background: c.fond }}>
@@ -153,13 +169,14 @@ export default function Appels() {
                   </td>
                   <td style={{ fontWeight: l.nb_tentatives >= 3 ? 700 : 400 }}>{l.nb_tentatives}</td>
                   <td>{l.statut_traitement === "Résolu" ? "Résolu ✅" : joursEcoules(l.date_entree, l.resolu_le)}</td>
-                  <td>{l.statut_traitement === "Résolu" ? "✅" : alerteSla(l) ? "🚨" : "🟢"}</td>
+                  <td>{{ resolu: "✅", urgent: "🚨", suivre: "⚠", ok: "🟢" }[niveauAppel(l)]}</td>
                   <td>{l.saisi_par_nom || "—"}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </>)}
       </main>
     </>
   );

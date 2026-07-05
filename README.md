@@ -1,65 +1,62 @@
-# notaire_abj
+# NOTARIA — Gestion interne du cabinet notarial
 
-# NOTARIA — Plateforme SaaS multi-études de gestion notariale (socle V1)
+Outil de suivi pour **l'étude de Me KOUASSI MARLENE K. ELISEE** (Abidjan, Côte d'Ivoire) :
+registre des appels et courriers, suivi des actes et minutes, tableau de bord et volet financier réservé au Notaire.
 
-Socle applicatif conforme au dossier de conception V1.0.
-Étude pilote : **Me KOUASSI MARLENE K. ELISEE — Abidjan**.
-Les registres démarrent **vides** : aucune donnée des fichiers Excel n'est migrée.
+> Ne remplace pas les registres officiels (répertoire des minutes). Données couvertes par le secret professionnel.
 
-## Contenu du socle
+## Fonctionnalités
 
-| Périmètre | État |
+| Module | Description |
 |---|---|
-| Schéma PostgreSQL multi-tenant + Row-Level Security **forcée** | ✅ Inclus (`db/schema.sql`) |
-| Référentiels : 29 conservations foncières, motifs, statuts… | ✅ Inclus (`db/seed.sql`) |
-| Connexion identifiant + mot de passe, verrouillage après 5 échecs, session 30 min | ✅ Inclus |
-| Journal des Appels & Courriers : saisie hybride, SLA 72 h / 5 j, colorations V7 | ✅ Inclus |
-| Suivi des Actes : échéance auto J+14, colorations V2, volet financier FCFA | ✅ Inclus |
-| Journal historisé des pièces manquantes (append-only) | ✅ Inclus |
-| Tableau de bord : compteurs, analyse par Conservation Foncière, comparatif mensuel | ✅ Inclus |
-| Journal d'audit (qui, quoi, quand, avant/après) | ✅ Inclus |
-| Suppression logique réservée à l'Administrateur (corbeille) | ✅ Inclus (API) |
-| Test automatisé d'isolation entre études | ✅ Inclus (`npm run test:isolation`) |
-| Connexion Google OAuth du Notaire | ⬜ À brancher (NextAuth) — la connexion par identifiant fonctionne en attendant |
-| Exports Excel/PDF, écran corbeille, gestion des comptes par le Notaire, purge décennale | ⬜ Étape suivante |
+| Appels & Courriers | Saisie hybride, SLA, colorations par ancienneté |
+| Actes & Minutes | Échéances auto (simple +20 j, complexe +30 j, succession +180 j), journal des pièces |
+| Tableau de bord | Compteurs, finances (admin), répartitions par conservation, étape, responsable |
+| Sécurité | Session 30 min, verrouillage après 5 échecs, changement de mot de passe obligatoire à la 1ère connexion |
 
-## Installation (10 minutes)
+## Installation locale (SQLite — 5 minutes)
 
-1. **Prérequis** : Node.js 18+, PostgreSQL 14+ (local, Supabase ou Neon).
-2. Copier la configuration :
-   ```bash
-   cp .env.example .env
-   # renseigner DATABASE_URL et un JWT_SECRET aléatoire (openssl rand -hex 32)
-   ```
-3. Créer la base :
-   ```bash
-   npm install
-   npm run db:init
-   ```
-4. Lancer :
-   ```bash
-   npm run dev          # http://localhost:3000
-   ```
-5. Se connecter avec un compte de démonstration :
-   - `notaire` / `ChangezMoi2026!` (Administrateur d'étude)
-   - `secretariat`, `clerc1`, `accueil` / même mot de passe (collaborateurs)
+**Prérequis** : Node.js 18+ (22 recommandé)
 
-   **Changez ces mots de passe immédiatement.**
+```bash
+npm install
+npm run dev          # migre la base SQLite puis lance http://localhost:3000
+```
 
-## Sécurité — points non négociables avant toute mise en ligne
+Sans `DATABASE_URL`, la base SQLite est créée dans `data/notaria.db`.
 
-- Exécuter `npm run test:isolation` : le moindre échec **bloque la livraison**.
-  Le test a besoin de deux variables : `DATABASE_URL` (rôle applicatif `notaria_app`)
-  et `ADMIN_DATABASE_URL` (compte administrateur, uniquement pour créer les deux
-  études fictives du test — jamais utilisé par l'application).
-- L'application doit se connecter avec le rôle `notaria_app` (jamais superuser,
-  sinon la RLS ne s'applique pas).
-- HTTPS obligatoire ; `JWT_SECRET` long et secret ; sauvegardes quotidiennes chiffrées.
-- Faire réaliser un test d'intrusion avant l'ouverture au-delà de l'étude pilote.
+Comptes de démonstration (mot de passe : `ChangezMoi2026!`) :
 
-## Ce que ce socle N'EST PAS
+| Identifiant | Rôle |
+|---|---|
+| `notaire` | Notaire / administrateur d'étude |
+| `secretariat`, `clerc1`, `accueil` | Collaborateurs |
 
-C'est un **point de départ solide (~90 % du périmètre V1)**, pas un produit fini :
-il reste l'OAuth Google, les exports, l'écran d'administration des comptes,
-l'onboarding Super-Administrateur, les tests de charge et le déploiement supervisé.
-Un développeur doit accompagner la mise en production.
+**Changez ces mots de passe dès la première connexion.**
+
+## Production (Render + PostgreSQL)
+
+Sur Render, définir `DATABASE_URL` (PostgreSQL), `JWT_SECRET` et `NODE_ENV=production`.
+Le build exécute automatiquement `scripts/migrate.js` avec `db/schema.pg.sql` et `db/seed.pg.sql`.
+
+Données de démonstration (PostgreSQL uniquement) :
+
+```bash
+psql "$DATABASE_URL" -f db/demo.sql
+psql "$DATABASE_URL" -f db/demo_reset.sql   # effacer la démo
+```
+
+## Tests
+
+```bash
+npm run test:isolation   # vérifie l'isolation entre études (SQLite ou PostgreSQL)
+npm run db:verify        # vérifie la base SQLite locale
+```
+
+## Fichiers SQL
+
+| Fichier | Usage |
+|---|---|
+| `db/schema.sqlite.sql` + `db/seed.sqlite.sql` | Développement local |
+| `db/schema.pg.sql` + `db/seed.pg.sql` | Production Render |
+| `db/demo.sql` / `db/demo_reset.sql` | Données fictives (PostgreSQL) |

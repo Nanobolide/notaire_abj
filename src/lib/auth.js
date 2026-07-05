@@ -6,7 +6,8 @@ const DUREE_SESSION = 60 * 30; // 30 min — postes partagés à l'accueil
 
 export function creerSession(user) {
   const token = jwt.sign(
-    { uid: user.id, etudeId: user.etude_id, role: user.role, nom: user.nom_affiche },
+    { uid: user.id, etudeId: user.etude_id, role: user.role, nom: user.nom_affiche,
+      doitChangerMdp: !!user.doit_changer_mdp },
     process.env.JWT_SECRET,
     { expiresIn: DUREE_SESSION }
   );
@@ -40,4 +41,8 @@ export function exigerAdmin() {
     const e = new Error("Réservé à l'Administrateur d'étude"); e.status = 403; throw e;
   }
   return s;
+}
+
+export function estAdmin(s) {
+  return s && (s.role === "admin_etude" || s.role === "super_admin");
 }

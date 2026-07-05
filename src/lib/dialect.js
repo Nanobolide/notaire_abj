@@ -1,4 +1,4 @@
-/** Helpers SQL selon le moteur : PostgreSQL (DATABASE_URL) ou SQLite (local). */
+/** Helpers SQL — PostgreSQL (DATABASE_URL) ou SQLite (local sans DATABASE_URL). */
 
 export function isPg() {
   return !!process.env.DATABASE_URL;
@@ -8,14 +8,38 @@ export function now() {
   return isPg() ? "now()" : "datetime('now')";
 }
 
+export function today() {
+  return isPg() ? "CURRENT_DATE" : "date('now')";
+}
+
+/** Comptage conditionnel : FILTER (PG) / CASE (SQLite). */
+export function cnt(cond) {
+  return isPg()
+    ? `count(*) FILTER (WHERE ${cond})`
+    : `COALESCE(sum(case when ${cond} then 1 else 0 end), 0)`;
+}
+
+export const EN_COURS = `progression NOT IN ('Terminé','Annulé')`;
+
 export function actifClause(alias = "u") {
   return isPg() ? `${alias}.actif = true` : `${alias}.actif = 1`;
+}
+
+export function actifFalse() {
+  return isPg() ? "false" : "0";
 }
 
 export function lockAccountSql() {
   return isPg()
     ? "verrouille_jusqua = now() + interval '100 years'"
     : "verrouille_jusqua = datetime('now', '+100 years')";
+}
+
+/** Jours écoulés depuis une date (pour seuils d'urgence). */
+export function joursDepuis(col) {
+  return isPg()
+    ? `${today()} - ${col}`
+    : `cast(julianday(${today()}) - julianday(${col}) as integer)`;
 }
 
 export function sqlAppelsNumero() {
@@ -69,7 +93,7 @@ export function sqlActesInsert() {
        valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
      VALUES ($1,$2,$3,
              COALESCE($4::date, CURRENT_DATE),
-             COALESCE($5::date, CURRENT_DATE + 14),
+             COALESCE($5::date, CURRENT_DATE + 30),
              $6,$7,$8,$9, COALESCE($10,'Rédaction'),
              COALESCE($11,0),COALESCE($12,0),COALESCE($13,0),
              COALESCE($14,'En attente'), $15, $16, $17)
@@ -80,7 +104,7 @@ export function sqlActesInsert() {
        valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
      VALUES ($1,$2,$3,$4,
              COALESCE($5, date('now')),
-             COALESCE($6, date('now', '+14 days')),
+             COALESCE($6, date('now', '+30 days')),
              $7,$8,$9,$10, COALESCE($11,'Rédaction'),
              COALESCE($12,0),COALESCE($13,0),COALESCE($14,0),
              COALESCE($15,'En attente'), $16, $17, $18)
@@ -105,67 +129,111 @@ export function sqlReferentiels() {
     : `SELECT type_liste, valeur FROM referentiels WHERE etude_id = $1 AND actif = 1 ORDER BY type_liste, ordre`;
 }
 
-export function sqlDashboard() {
+/** Requêtes tableau de bord (version enrichie). */
+export function dashboardQueries() {
+  const t = today();
+  const jOuv = joursDepuis("date_ouverture");
+  const barème = `(CASE WHEN nature_acte = 'Succession' THEN 365 WHEN complexite = 'Simple' THEN 60 ELSE 90 END)`;
+  const jEnt = joursDepuis("date_entree");
+
   if (isPg()) {
     return {
-      appels: `SELECT count(*) FILTER (WHERE date_entree = CURRENT_DATE) AS aujourdhui,
-               count(*) FILTER (WHERE statut_traitement <> 'Résolu') AS en_cours,
-               count(*) FILTER (WHERE statut_traitement <> 'Résolu'
-                 AND type_flux = 'Appel Téléphonique'
-                 AND (date_entree + heure) < now() - interval '72 hours') AS alertes_72h,
-               count(*) FILTER (WHERE nb_tentatives >= 3 AND statut_traitement <> 'Résolu') AS tentatives_3plus
-        FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL`,
-      actes: `SELECT count(*) FILTER (WHERE progression NOT IN ('Terminé','Annulé')) AS en_cours,
-               count(*) FILTER (WHERE progression NOT IN ('Terminé','Annulé')
-                 AND date_echeance < CURRENT_DATE) AS echeances_depassees,
-               COALESCE(sum(montant_regle),0) AS encaisse,
-               COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
-               COALESCE(sum(valeur_acte),0) AS valeur_totale
-        FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
-      parConservation: `SELECT conservation_fonciere,
-               count(*) AS dossiers,
-               round(avg(COALESCE(termine_le::date, CURRENT_DATE) - date_ouverture)) AS delai_moyen_jours,
-               count(*) FILTER (WHERE progression NOT IN ('Terminé','Annulé')
-                 AND date_echeance < CURRENT_DATE) AS en_depassement
-        FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND conservation_fonciere IS NOT NULL
-        GROUP BY conservation_fonciere ORDER BY delai_moyen_jours DESC NULLS LAST`,
-      comparatif: `SELECT to_char(date_trunc('month', date_entree), 'YYYY-MM') AS mois,
-               count(*) AS appels,
-               count(*) FILTER (WHERE resolu_le IS NOT NULL
-                 AND resolu_le - (date_entree + heure) <= interval '72 hours') AS resolus_sous_72h
-        FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL
-        GROUP BY 1 ORDER BY 1 DESC LIMIT 6`,
+      actes: `SELECT count(*) AS total,
+        ${cnt(EN_COURS)} AS en_cours,
+        ${cnt("progression = 'Terminé'")} AS termines,
+        ${cnt("progression = 'Annulé'")} AS annules,
+        ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS echeances_depassees,
+        ${cnt(`${EN_COURS} AND ${jOuv} > ${barème}`)} AS critiques
+      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
+      finances: `SELECT COALESCE(sum(honoraires_totaux),0) AS honoraires_totaux,
+        COALESCE(sum(montant_regle),0) AS honoraires_regles,
+        COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
+        COALESCE(sum(valeur_acte),0) AS valeur_totale,
+        COALESCE(sum(honoraires_totaux) FILTER (WHERE ${EN_COURS}),0) AS zoom_honoraires_en_cours,
+        COALESCE(sum(valeur_acte) FILTER (WHERE ${EN_COURS}),0) AS zoom_valeur_en_cours
+      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
+      parConservation: `SELECT conservation_fonciere, count(*) AS dossiers,
+        ${cnt(EN_COURS)} AS en_cours,
+        ${cnt("progression = 'Terminé'")} AS termines,
+        ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS depassees
+      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND conservation_fonciere IS NOT NULL
+      GROUP BY conservation_fonciere ORDER BY conservation_fonciere`,
+      parEtape: `SELECT progression AS etape, count(*) AS dossiers
+      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND ${EN_COURS}
+      GROUP BY progression ORDER BY count(*) DESC`,
+      parResponsable: `SELECT responsable, count(*) AS total,
+        ${cnt("progression = 'Terminé'")} AS termines,
+        ${cnt(EN_COURS)} AS en_cours,
+        ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS depassees
+      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND responsable IS NOT NULL
+      GROUP BY responsable ORDER BY count(*) DESC`,
+      appels: `SELECT count(*) AS total,
+        ${cnt("statut_traitement = 'Résolu'")} AS resolus,
+        ${cnt("statut_traitement = 'En cours'")} AS en_cours,
+        ${cnt("statut_traitement = 'En attente du Clerc'")} AS en_attente,
+        ${cnt("statut_traitement <> 'Résolu' AND nb_tentatives >= 3")} AS tentatives_3plus,
+        ${cnt(`statut_traitement <> 'Résolu' AND ${jEnt} > 5`)} AS urgents
+      FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL`,
+      parFlux: `SELECT type_flux, count(*) AS nombre FROM appels_courriers
+      WHERE etude_id = $1 AND supprime_le IS NULL GROUP BY type_flux ORDER BY count(*) DESC`,
+      parMotif: `SELECT motif, count(*) AS nombre FROM appels_courriers
+      WHERE etude_id = $1 AND supprime_le IS NULL AND motif IS NOT NULL GROUP BY motif ORDER BY count(*) DESC`,
+      parCollaborateur: `SELECT destinataire, count(*) AS total,
+        ${cnt("statut_traitement = 'Résolu'")} AS resolus,
+        ${cnt("statut_traitement <> 'Résolu'")} AS non_resolus,
+        ${cnt(`statut_traitement <> 'Résolu' AND ${jEnt} > 5`)} AS urgents
+      FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL AND destinataire IS NOT NULL
+      GROUP BY destinataire ORDER BY count(*) DESC`,
     };
   }
+
+  const sumIf = (cond, col) => `COALESCE(sum(case when ${cond} then ${col} else 0 end),0)`;
   return {
-    appels: `SELECT sum(case when date_entree = date('now') then 1 else 0 end) AS aujourdhui,
-             sum(case when statut_traitement <> 'Résolu' then 1 else 0 end) AS en_cours,
-             sum(case when statut_traitement <> 'Résolu'
-               AND type_flux = 'Appel Téléphonique'
-               AND datetime(date_entree || ' ' || coalesce(heure,'00:00')) < datetime('now', '-72 hours')
-               then 1 else 0 end) AS alertes_72h,
-             sum(case when nb_tentatives >= 3 AND statut_traitement <> 'Résolu' then 1 else 0 end) AS tentatives_3plus
-      FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL`,
-    actes: `SELECT sum(case when progression NOT IN ('Terminé','Annulé') then 1 else 0 end) AS en_cours,
-             sum(case when progression NOT IN ('Terminé','Annulé')
-               AND date_echeance < date('now') then 1 else 0 end) AS echeances_depassees,
-             COALESCE(sum(montant_regle),0) AS encaisse,
-             COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
-             COALESCE(sum(valeur_acte),0) AS valeur_totale
-      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
-    parConservation: `SELECT conservation_fonciere,
-             count(*) AS dossiers,
-             round(avg(julianday(COALESCE(date(termine_le), date('now'))) - julianday(date_ouverture))) AS delai_moyen_jours,
-             sum(case when progression NOT IN ('Terminé','Annulé')
-               AND date_echeance < date('now') then 1 else 0 end) AS en_depassement
-      FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND conservation_fonciere IS NOT NULL
-      GROUP BY conservation_fonciere ORDER BY delai_moyen_jours DESC`,
-    comparatif: `SELECT strftime('%Y-%m', date_entree) AS mois,
-             count(*) AS appels,
-             sum(case when resolu_le IS NOT NULL
-               AND (julianday(resolu_le) - julianday(datetime(date_entree || ' ' || coalesce(heure,'00:00')))) * 24 <= 72
-               then 1 else 0 end) AS resolus_sous_72h
-      FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL
-      GROUP BY 1 ORDER BY 1 DESC LIMIT 6`,
+    actes: `SELECT count(*) AS total,
+      ${cnt(EN_COURS)} AS en_cours,
+      ${cnt("progression = 'Terminé'")} AS termines,
+      ${cnt("progression = 'Annulé'")} AS annules,
+      ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS echeances_depassees,
+      ${cnt(`${EN_COURS} AND ${jOuv} > ${barème}`)} AS critiques
+    FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
+    finances: `SELECT COALESCE(sum(honoraires_totaux),0) AS honoraires_totaux,
+      COALESCE(sum(montant_regle),0) AS honoraires_regles,
+      COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
+      COALESCE(sum(valeur_acte),0) AS valeur_totale,
+      ${sumIf(EN_COURS, "honoraires_totaux")} AS zoom_honoraires_en_cours,
+      ${sumIf(EN_COURS, "valeur_acte")} AS zoom_valeur_en_cours
+    FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
+    parConservation: `SELECT conservation_fonciere, count(*) AS dossiers,
+      ${cnt(EN_COURS)} AS en_cours,
+      ${cnt("progression = 'Terminé'")} AS termines,
+      ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS depassees
+    FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND conservation_fonciere IS NOT NULL
+    GROUP BY conservation_fonciere ORDER BY conservation_fonciere`,
+    parEtape: `SELECT progression AS etape, count(*) AS dossiers
+    FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND ${EN_COURS}
+    GROUP BY progression ORDER BY count(*) DESC`,
+    parResponsable: `SELECT responsable, count(*) AS total,
+      ${cnt("progression = 'Terminé'")} AS termines,
+      ${cnt(EN_COURS)} AS en_cours,
+      ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS depassees
+    FROM actes WHERE etude_id = $1 AND supprime_le IS NULL AND responsable IS NOT NULL
+    GROUP BY responsable ORDER BY count(*) DESC`,
+    appels: `SELECT count(*) AS total,
+      ${cnt("statut_traitement = 'Résolu'")} AS resolus,
+      ${cnt("statut_traitement = 'En cours'")} AS en_cours,
+      ${cnt("statut_traitement = 'En attente du Clerc'")} AS en_attente,
+      ${cnt("statut_traitement <> 'Résolu' AND nb_tentatives >= 3")} AS tentatives_3plus,
+      ${cnt(`statut_traitement <> 'Résolu' AND ${jEnt} > 5`)} AS urgents
+    FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL`,
+    parFlux: `SELECT type_flux, count(*) AS nombre FROM appels_courriers
+    WHERE etude_id = $1 AND supprime_le IS NULL GROUP BY type_flux ORDER BY count(*) DESC`,
+    parMotif: `SELECT motif, count(*) AS nombre FROM appels_courriers
+    WHERE etude_id = $1 AND supprime_le IS NULL AND motif IS NOT NULL GROUP BY motif ORDER BY count(*) DESC`,
+    parCollaborateur: `SELECT destinataire, count(*) AS total,
+      ${cnt("statut_traitement = 'Résolu'")} AS resolus,
+      ${cnt("statut_traitement <> 'Résolu'")} AS non_resolus,
+      ${cnt(`statut_traitement <> 'Résolu' AND ${jEnt} > 5`)} AS urgents
+    FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL AND destinataire IS NOT NULL
+    GROUP BY destinataire ORDER BY count(*) DESC`,
   };
 }

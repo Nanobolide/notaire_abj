@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { lireJson } from "@/lib/http";
 
 export default function Connexion() {
   const [identifiant, setIdentifiant] = useState("");
@@ -17,16 +18,19 @@ export default function Connexion() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifiant, motDePasse }),
     });
-    const data = await rep.json();
+    const data = await lireJson(rep);
     if (!rep.ok) { setErreur(data.erreur || "Connexion impossible."); setEnvoi(false); return; }
-    routeur.push("/tableau-de-bord");
+    routeur.push(data.doitChangerMdp ? "/changer-mot-de-passe" : "/tableau-de-bord");
   };
 
   return (
     <div className="connexion-fond">
       <div className="connexion-boite">
         <h1>NOTARIA</h1>
-        <p className="sous-titre">Gestion notariale — connexion à votre étude</p>
+        <p className="sous-titre">
+          Cabinet notarial — Étude Me KOUASSI MARLENE K. ELISEE<br />
+          Abidjan, Côte d&apos;Ivoire
+        </p>
         <form onSubmit={soumettre}>
           <input placeholder="Identifiant (ex. clerc1)" value={identifiant}
                  onChange={(e) => setIdentifiant(e.target.value)} autoFocus />

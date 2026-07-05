@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { exigerSession, exigerAdmin } from "@/lib/auth";
+import { exigerSession, exigerAdmin, estAdmin } from "@/lib/auth";
 import { withTenant, audit } from "@/lib/db";
 import { now } from "@/lib/dialect";
 
@@ -11,6 +11,8 @@ export async function PATCH(req, { params }) {
   try {
     const s = exigerSession();
     const d = await req.json();
+    if (!estAdmin(s))
+      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
     const ligne = await withTenant(s.etudeId, async (c) => {
       const { rows: avantRows } = await c.query(
         `SELECT * FROM actes WHERE id = $1 AND etude_id = $2 AND supprime_le IS NULL`,

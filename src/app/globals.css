@@ -19,14 +19,16 @@ a { color: var(--bleu-clair); text-decoration: none; }
   background: var(--bleu); color: #fff; padding: 10px 20px;
   display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
 }
-.entete .marque { font-size: 17px; font-weight: 700; letter-spacing: 2px; }
+.entete .marque { font-size: 17px; font-weight: 700; letter-spacing: 2px; line-height: 1.2; }
+.entete .marque small { display: block; font-size: 10px; font-weight: 400; letter-spacing: 0.5px; color: #8A94A8; margin-top: 2px; }
 .entete .marque span { color: var(--or); }
 .entete nav { display: flex; gap: 4px; }
 .entete nav a {
   color: #D7E0F0; padding: 6px 12px; border-radius: 4px; font-weight: 600;
 }
 .entete nav a:hover, .entete nav a.actif { background: var(--bleu-clair); color: #fff; }
-.entete .session { margin-left: auto; font-size: 12.5px; color: #C9D4E8; }
+.entete .session { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: #C9D4E8; }
+.entete .nom-utilisateur { color: #E8EDF5; font-weight: 500; }
 
 .page { max-width: 1280px; margin: 0 auto; padding: 20px; }
 h1 { font-size: 20px; color: var(--bleu); margin: 0 0 4px; }
@@ -84,3 +86,28 @@ form.saisie textarea { grid-column: 1 / -1; min-height: 50px; }
   .page { padding: 10px; }
   table.registre { font-size: 12px; display: block; overflow-x: auto; white-space: nowrap; }
 }
+
+/* --- Tableau de bord V1.2 : gradation et sections --- */
+.compteur.avert { border-left-color: #E26B0A; }
+.compteur.avert .valeur { color: #E26B0A; }
+.bandeau-section {
+  background: var(--or); color: #fff; font-weight: 700; letter-spacing: 1px;
+  padding: 8px 14px; border-radius: 6px; margin: 18px 0 12px; font-size: 14px;
+}
+.deux-colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .deux-colonnes { grid-template-columns: 1fr; } }
+.lien-detail { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+td.montant { text-align: right; font-variant-numeric: tabular-nums; }
+tr.zoom td { color: #808080; font-style: italic; font-size: 12px; }
+.onglets { display: flex; gap: 6px; margin-bottom: 14px; }
+.onglets button {
+  font: inherit; font-weight: 700; padding: 8px 16px; border-radius: 6px 6px 0 0;
+  border: 1px solid var(--trait); border-bottom: none; background: #E9EDF5; color: #3A4560; cursor: pointer;
+}
+.onglets button.actif { background: var(--bleu); color: #fff; border-color: var(--bleu); }
+
+/* --- Barèmes de délais (V1.3) --- */
+.baremes { margin-bottom: 8px; }
+.bareme { font-size: 12px; color: #5A6478; margin: 2px 0 8px; }
+.bareme .p { display: inline-block; width: 11px; height: 11px; border-radius: 3px;
+  border: 1px solid #CCC; vertical-align: -1px; margin: 0 3px 0 8px; }

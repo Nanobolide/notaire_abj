@@ -25,21 +25,28 @@ function getSqlite() {
   return sqlite;
 }
 
+function bindParams(params) {
+  return params.map((p) => (p === undefined ? null : p));
+}
+
 function sqliteQuery(sql, params = []) {
-  const s = sql.replace(/\$(\d+)/g, "?");
+  const bound = bindParams(params);
+  const expanded = [];
+  const s = sql.replace(/\$(\d+)/g, (_, n) => {
+    expanded.push(bound[parseInt(n, 10) - 1]);
+    return "?";
+  });
   const head = sql.trim().split(/\s+/)[0].toUpperCase();
   if (head === "SELECT" || head === "WITH" || /RETURNING/i.test(sql)) {
-    const rows = getSqlite().prepare(s).all(...params);
+    const rows = getSqlite().prepare(s).all(...expanded);
     return { rows, rowCount: rows.length };
   }
-  const info = getSqlite().prepare(s).run(...params);
+  const info = getSqlite().prepare(s).run(...expanded);
   return { rows: [], rowCount: info.changes };
 }
 
 async function pgQuery(sql, params = []) {
-  if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
-  }
+  if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
   return pool.query(sql, params);
 }
 
@@ -51,6 +58,7 @@ export async function query(sql, params = []) {
   return isPg ? pgQuery(sql, params) : sqliteQuery(sql, params);
 }
 
+/** Exécute `fn(client)` dans une transaction (isolation par etude_id dans les requêtes). */
 export async function withTenant(etudeId, fn) {
   const client = { etudeId, query };
   if (isPg) {

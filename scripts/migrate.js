@@ -36,7 +36,8 @@ function migrateSqlite() {
     console.log(`→ ${file}`);
     db.exec(fs.readFileSync(path.join(ROOT, file), "utf8"));
   }
-  if (!process.env.JWT_SECRET && !process.env.RENDER && process.env.NODE_ENV !== "production") {
+  if (!fs.existsSync(path.join(ROOT, ".env"))
+    && !process.env.JWT_SECRET && !process.env.RENDER && process.env.NODE_ENV !== "production") {
     const jwt = crypto.randomBytes(32).toString("hex");
     const relPath = path.relative(ROOT, DB_PATH).replace(/\\/g, "/");
     fs.writeFileSync(path.join(ROOT, ".env"), `DATABASE_PATH=${relPath}\nJWT_SECRET=${jwt}\n`, "utf8");

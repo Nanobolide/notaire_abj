@@ -13,16 +13,23 @@ export function joursEcoules(dateEntree, dateFin) {
   return Math.max(0, Math.floor((fin - debut) / JOUR_MS));
 }
 
-/** SLA en heures selon le type de flux : appels 72 h, courriers 5 jours. */
-export function slaHeures(typeFlux) {
-  return typeFlux === "Appel Téléphonique" ? 72 : 120;
+/** Barème d'un acte : Succession 180/270/365 j — Simple 20/40/60 j — Complexe 30/60/90 j. */
+export function seuilsActe(acte) {
+  if (acte.nature_acte === "Succession") return { s1: 180, s2: 270, s3: 365 };
+  if (acte.complexite === "Simple") return { s1: 20, s2: 40, s3: 60 };
+  return { s1: 30, s2: 60, s3: 90 };
 }
 
-/** Alerte SLA (72 h / 5 j) : vraie si non résolu au-delà du délai. */
-export function alerteSla(appel) {
-  if (appel.statut_traitement === "Résolu") return false;
-  const debut = new Date(`${String(appel.date_entree).slice(0, 10)}T${appel.heure || "00:00"}`);
-  return (Date.now() - debut.getTime()) / 3600000 > slaHeures(appel.type_flux);
+/** Barème unifié appels ET courriers : 3 / 5 / 10 jours. */
+export const SEUILS_APPEL = { s1: 3, s2: 5, s3: 10 };
+
+/** Niveau d'alerte d'un appel/courrier : "ok" | "suivre" (>3j) | "urgent" (>5j). */
+export function niveauAppel(appel) {
+  if (appel.statut_traitement === "Résolu") return "resolu";
+  const j = joursEcoules(appel.date_entree, appel.resolu_le);
+  if (j > SEUILS_APPEL.s2) return "urgent";
+  if (j > SEUILS_APPEL.s1) return "suivre";
+  return "ok";
 }
 
 /**
@@ -31,13 +38,11 @@ export function alerteSla(appel) {
  * Orange foncé (>30j) > Orange clair (>14j) > Jaune (>7j) > Turquoise (>3j) > Blanc.
  */
 export function couleurAppel(appel) {
-  if (appel.statut_traitement === "Résolu") return { fond: "#D6F5D6", nom: "vert" };
+  if (appel.statut_traitement === "Résolu") return { fond: "#E9F7EC", nom: "vert_pale" };
   const j = joursEcoules(appel.date_entree, appel.resolu_le);
-  if (j > 60 || alerteSla(appel) || appel.nb_tentatives >= 3) return { fond: "#FFC7CE", nom: "rouge" };
-  if (j > 30) return { fond: "#F4A460", nom: "orange_fonce" };
-  if (j > 14) return { fond: "#FFD9B3", nom: "orange_clair" };
-  if (j > 7)  return { fond: "#FFF3B0", nom: "jaune" };
-  if (j > 3)  return { fond: "#C9F0F0", nom: "turquoise" };
+  if (j > SEUILS_APPEL.s3) return { fond: "#FF9E9E", nom: "rouge" };
+  if (j > SEUILS_APPEL.s2) return { fond: "#FFD9A0", nom: "orange" };
+  if (j > SEUILS_APPEL.s1) return { fond: "#FFF4C2", nom: "jaune" };
   return { fond: "#FFFFFF", nom: "blanc" };
 }
 
@@ -46,12 +51,13 @@ export function couleurAppel(appel) {
  * Vert (Terminé) > Violet (Annulé) > Rouge (>30j) > Orange (>14j) > Jaune (>7j) > Blanc.
  */
 export function couleurActe(acte) {
-  if (acte.progression === "Terminé") return { fond: "#D6F5D6", nom: "vert" };
-  if (acte.progression === "Annulé")  return { fond: "#E6D6F5", nom: "violet" };
+  if (acte.progression === "Terminé") return { fond: "#E9F7EC", nom: "vert_pale" };
+  if (acte.progression === "Annulé")  return { fond: "#F0EAF8", nom: "violet" };
   const j = joursEcoules(acte.date_ouverture, acte.termine_le);
-  if (j > 30) return { fond: "#FFC7CE", nom: "rouge" };
-  if (j > 14) return { fond: "#FFD9B3", nom: "orange" };
-  if (j > 7)  return { fond: "#FFF3B0", nom: "jaune" };
+  const { s1, s2, s3 } = seuilsActe(acte);
+  if (j > s3) return { fond: "#FF9E9E", nom: "rouge" };
+  if (j > s2) return { fond: "#FFD9A0", nom: "orange" };
+  if (j > s1) return { fond: "#FFF4C2", nom: "jaune" };
   return { fond: "#FFFFFF", nom: "blanc" };
 }
 
