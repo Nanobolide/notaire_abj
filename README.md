@@ -1,79 +1,162 @@
-# NOTARIA — Gestion interne du cabinet notarial
+# NOTARIA — Plateforme SaaS multi-études de gestion notariale (socle V2.2)
 
-Outil de suivi pour **l'étude de Me KOUASSI MARLENE K. ELISEE** (Abidjan, Côte d'Ivoire) :
-registre des appels et courriers, suivi des actes et minutes, tableau de bord et volet financier réservé au Notaire.
+**V2.2 — ergonomie & présence** : menu du haut ÉPURÉ (Tableau de bord · Appels · Actes),
+tout le reste regroupé dans un bouton « ⚙ Paramètres » à droite (Comptes, Corbeille, Délais &
+barèmes, Changer mot de passe, Mentions légales, Se déconnecter). Indicateur de CONNEXION discret
+sous le nom de l'étude (point vert + nom + rôle de la personne connectée). Carte « QUI EST CONNECTÉ »
+sur le tableau de bord, réservée au Notaire (point vert = actif < 5 min, gris = hors ligne + depuis
+quand). Volet « ⚙ RÉGLER LES DÉLAIS » directement dans le registre des actes : le Notaire ajuste un
+barème et le tableau se recolore, synchronisé avec la page Paramètres. Déconnexion → hors ligne
+immédiat. Non-régression vérifiée : isolation, C4/C6/C7/C8, présence.
 
-> Ne remplace pas les registres officiels (répertoire des minutes). Données couvertes par le secret professionnel.
+**V2.1 — réglage rapide + couleurs personnalisables** :
+• Bouton « ⚙ Régler les délais » directement dans le registre des actes : le Notaire ajuste
+  les seuils (simples / complexes / successions) sans quitter la page, clique « Appliquer »,
+  et le tableau se recolore aussitôt. C'est le MÊME paramètre que l'écran Paramètres (aucune
+  duplication). • Le Notaire peut choisir les COULEURS des alertes (4 teintes : léger / moyen /
+  grave / terminé) via des sélecteurs de couleur, avec aperçu en direct et validation #RRGGBB ;
+  bouton « Rétablir les valeurs par défaut » inclus. • Les registres, le tableau de bord et les
+  exports utilisent les couleurs de chaque étude. Non-régression : isolation, C4/C6/C7/C8.
 
-## Fonctionnalités
+**V2.0 — écran PARAMÈTRES du Notaire** : nouveau bouton « Paramètres » (admin) permettant de régler
+soi-même, par étude : (1) la DURÉE DE CONSERVATION des données (1 à 10 ans) ; (2) la durée de
+SESSION (15/30/60/120 min) ; (3) tous les BARÈMES DE DÉLAIS (actes simples, complexes, successions,
+appels/courriers) — chaque seuil modifiable, avec validation « croissants et positifs » côté serveur
+ET contraintes au niveau base. Bouton « ↺ Rétablir les valeurs par défaut » (barèmes recommandés).
+Les couleurs des registres s'adaptent automatiquement aux barèmes de l'étude. Raccourci vers la
+gestion des collaborateurs. Réservé au Notaire (un collaborateur reçoit 403).
+Non-régression vérifiée : isolation multi-tenant (2 nouvelles tables sous RLS), C4/C6/C7/C8.
 
-| Module | Description |
+**V1.9 — robustesse et confort quotidien** :
+• BROUILLON anti-coupure : le formulaire est sauvegardé dans le navigateur à chaque frappe ;
+  après une coupure internet, une fermeture d'onglet ou une session expirée, la saisie est
+  proposée à la restauration. • ALERTE anti-doublon : si un acte (même minute/nature) ou un
+  appel (même client) vient d'être saisi, une confirmation « Enregistrer quand même ? » s'affiche.
+• PAGINATION serveur (50 par page) sur les deux registres. • EXPORTS Excel par PLAGE DE DATES
+  (du… au…, ou tout depuis le début). • PURGE DÉCENNALE : fonction recensant les actes de plus de
+  10 ans à exporter avant archivage. • RÉCUPÉRATION du compte Notaire : lien « Mot de passe oublié »
+  qui crée une demande traitée par le Super-Admin (équipe technique) après confirmation de vive voix.
+Note hébergement : les SAUVEGARDES automatiques sont fournies par l'hébergeur (ex. Neon = sauvegardes
+quotidiennes incluses) — à activer au déploiement, pas de code applicatif.
+Non-régression vérifiée : isolation multi-tenant, C4/C6/C7/C8, nouvelles fonctions moteur.
+
+**V1.8 — 3e audit (tolérance zéro) traité** :
+C7 révocation IMMÉDIATE de session (un compte désactivé ou verrouillé perd l'accès à la
+requête suivante, sans attendre les 30 min) · C8 verrouillage TEMPORAIRE et progressif
+(15 min à 5 échecs, 1 h à 8) et l'admin d'étude n'est JAMAIS verrouillable (plus de déni de
+service possible sur le Notaire) · I6 la corbeille purge réellement au-delà de 30 jours ·
+N5 page « Mentions légales & protection des données (loi 2013-450) » liée au pied de page,
+avec responsable de traitement, finalité, droits et champ de déclaration ARTCI ·
+mot de passe provisoire masqué à la saisie. Non-régression vérifiée (isolation, C4, C6).
+
+**V1.7** : C6 corrigée (identifiant de connexion UNIQUE sur toute la plateforme — le moteur
+refuse les doublons inter-études) · écran **Corbeille** (Notaire) : consulter, restaurer en un
+clic, supprimer définitivement, alerte sur les éléments à moins de 5 jours de la purge ·
+**Exports Excel** des deux registres avec les couleurs des barèmes (boutons ⬇ Excel dans les
+registres, montants réservés au Notaire, chaque export journalisé) · **vues d'impression**
+🖨 Imprimer / PDF pour produire le registre à une inspection.
+Liste de recette pour le développeur : (1) restaurer un acte supprimé depuis /corbeille,
+(2) tenter de restaurer un doublon → message clair attendu, (3) télécharger /api/exports/actes
+en notaire puis en collaborateur (colonnes financières absentes), (4) Ctrl+P sur /imprimer/actes.
+
+**V1.6 — les 4 failles critiques de l'audit sont corrigées et testées** :
+C1 blocage SERVEUR du mot de passe provisoire · C2 volet financier filtré sur TOUTES les
+réponses (GET/POST/PATCH) · C3+I1+N3 écran « Comptes » du Notaire (créer, désactiver,
+déverrouiller, réinitialiser) · C4 journaux audit/pièces inviolables au niveau du moteur
+(REVOKE) · C5 unicité des numéros (minute et appels) avec gestion des collisions.
+**Également** : modification complète et suppression (corbeille) ligne par ligne dans les
+registres · parties multiples (+ Ajouter une partie) · 15 natures de dossier avec complexité
+pré-sélectionnée (Succession verrouillée en Complexe) · responsables d'actes limités au
+Notaire et aux Clercs · nom de l'étude affiché dans l'en-tête · garde-fous financiers ·
+numéros de téléphone étrangers acceptés. IMPORTANT : recréer la base (schema.sql + seed.sql).
+
+**Nouveautés V1.4** : changement de mot de passe OBLIGATOIRE à la première connexion ·
+volet financier visible et modifiable par le Notaire (admin) uniquement, masqué côté serveur pour les collaborateurs ·
+champ de recherche client dans les deux registres · échéance par défaut alignée sur les barèmes
+(simple +20 j, complexe +30 j, succession +180 j) · note déontologique permanente en pied de page.
+
+**Barèmes de délais V1.3** : actes simples 20/40/60 j · actes complexes 30/60/90 j · successions 180/270/365 j · appels et courriers 3/5/10 j (couleurs jaune → orange → rouge, vert pâle = terminé/résolu, violet = annulé).
+
+Socle applicatif conforme au dossier de conception V1.0.
+Étude pilote : **Me KOUASSI MARLENE K. ELISEE — Abidjan**.
+Les registres démarrent **vides** : aucune donnée des fichiers Excel n'est migrée.
+
+## Contenu du socle
+
+| Périmètre | État |
 |---|---|
-| Appels & Courriers | Saisie hybride, SLA, colorations par ancienneté |
-| Actes & Minutes | Échéances auto (simple +20 j, complexe +30 j, succession +180 j), journal des pièces |
-| Tableau de bord | Compteurs, finances (admin), répartitions par conservation, étape, responsable |
-| Sécurité | Session 30 min, verrouillage après 5 échecs, changement de mot de passe obligatoire à la 1ère connexion |
+| Schéma PostgreSQL multi-tenant + Row-Level Security **forcée** | ✅ Inclus (`db/schema.sql`) |
+| Référentiels : 29 conservations foncières, motifs, statuts… | ✅ Inclus (`db/seed.sql`) |
+| Connexion identifiant + mot de passe, verrouillage après 5 échecs, session 30 min | ✅ Inclus |
+| Journal des Appels & Courriers : saisie hybride, SLA 72 h / 5 j, colorations V7 | ✅ Inclus |
+| Suivi des Actes : échéance auto J+14, colorations V2, volet financier FCFA | ✅ Inclus |
+| Journal historisé des pièces manquantes (append-only) | ✅ Inclus |
+| Tableau de bord complet (modèle du classeur Excel V2.1) : compteurs gradués, suivi financier, analyse par Conservation Foncière, répartitions par étape / responsable / flux / motif / collaborateur | ✅ Inclus |
+| Pages en deux onglets « Formulaire » / « Registre » (modèle Google Forms → Sheets) | ✅ Inclus |
+| Colonne fusionnée ÉTAPE / STATUT (9 étapes + Terminé + Annulé) | ✅ Inclus |
+| Journal d'audit (qui, quoi, quand, avant/après) | ✅ Inclus |
+| Suppression logique réservée à l'Administrateur (corbeille) | ✅ Inclus (API) |
+| Test automatisé d'isolation entre études | ✅ Inclus (`npm run test:isolation`) |
+| Connexion Google OAuth du Notaire | ⬜ À brancher (NextAuth) — la connexion par identifiant fonctionne en attendant |
+| Exports Excel/PDF, écran corbeille, gestion des comptes par le Notaire, purge décennale | ⬜ Étape suivante |
 
-## Installation locale (SQLite — 5 minutes)
+## Déploiement Render (PostgreSQL — test à distance)
 
-**Prérequis** : Node.js 18+ (22 recommandé)
-
-```bash
-npm install
-npm run dev          # migre la base SQLite puis lance http://localhost:3000
-```
-
-Sans `DATABASE_URL`, la base SQLite est créée dans `data/notaria.db`.
-
-Comptes de démonstration (mot de passe : `ChangezMoi2026!`) :
-
-| Identifiant | Rôle |
-|---|---|
-| `notaire` | Notaire / administrateur d'étude |
-| `secretariat`, `clerc1`, `accueil` | Collaborateurs |
-
-**Changez ces mots de passe dès la première connexion.**
-
-## Production (Render + PostgreSQL)
-
-Le déploiement est configuré via `render.yaml` :
+Configuré via `render.yaml` (plan free) :
 
 | Variable | Source |
 |---|---|
 | `DATABASE_URL` | PostgreSQL Render (lié automatiquement) |
 | `JWT_SECRET` | Généré par Render |
 | `NODE_ENV` | `production` |
-| `PORT` | Injecté par Render |
 
-**Flux de déploiement** :
-1. Push sur `main` → Render lance le build (`npm run build`)
-2. Au démarrage (`npm start`), `prestart` exécute la migration PostgreSQL (`schema.pg.sql` + `seed.pg.sql`)
-3. Sonde de santé : `GET /api/health`
+**Flux** : push sur `main` → build (`npm run build`) → démarrage (`npm start`) → migration PG (`prestart`).
 
-Vérifier la base après déploiement :
+- Sonde santé : `GET /api/health`
+- URL : https://notaire-abj.onrender.com
+- Connexion test : `notaire` / `ChangezMoi2026!` (comptes seed)
 
-```bash
-DATABASE_URL="postgresql://..." node scripts/check-pg.js
-```
+> Le premier chargement peut prendre 30–60 s (service free en veille).
 
-Données de démonstration (PostgreSQL uniquement) :
+## Installation locale (SQLite — 5 minutes)
 
-```bash
-psql "$DATABASE_URL" -f db/demo.sql
-psql "$DATABASE_URL" -f db/demo_reset.sql   # effacer la démo
-```
+1. **Prérequis** : Node.js 18+ (22 recommandé).
+2. Copier la configuration :
+   ```bash
+   cp .env.example .env
+   # Ne pas définir DATABASE_URL → SQLite automatique
+   ```
+3. Créer la base et lancer :
+   ```bash
+   npm install
+   npm run dev          # migre + http://localhost:3000
+   ```
+   **Données de démonstration — EN UN CLIC** : connectez-vous en tant que `notaire`,
+   et sur le tableau de bord (registres vides) cliquez « Charger les données de
+   démonstration » : 30 actes + 30 appels (avril-juin 2026) identiques au classeur Excel.
+   Un bouton « Effacer les données de démonstration » fait l'inverse — il refuse d'agir
+   si les données présentes ne sont pas celles de la démo (protection des vraies données).
+   Alternative en ligne de commande (PostgreSQL uniquement) : `db/demo.sql` et `db/demo_reset.sql`.
+4. Se connecter :
+   - `notaire` / `ChangezMoi2026!` (Administrateur d'étude)
+   - `secretariat`, `clerc1`, `accueil` / même mot de passe (collaborateurs)
 
-## Tests
+   **Changez ces mots de passe immédiatement.**
 
-```bash
-npm run test:isolation   # vérifie l'isolation entre études (SQLite ou PostgreSQL)
-npm run db:verify        # vérifie la base SQLite locale
-```
+## Sécurité — points non négociables avant toute mise en ligne
 
-## Fichiers SQL
+- Exécuter `npm run test:isolation` : le moindre échec **bloque la livraison**.
+  Le test a besoin de deux variables : `DATABASE_URL` (rôle applicatif `notaria_app`)
+  et `ADMIN_DATABASE_URL` (compte administrateur, uniquement pour créer les deux
+  études fictives du test — jamais utilisé par l'application).
+- L'application doit se connecter avec le rôle `notaria_app` (jamais superuser,
+  sinon la RLS ne s'applique pas).
+- HTTPS obligatoire ; `JWT_SECRET` long et secret ; sauvegardes quotidiennes chiffrées.
+- Faire réaliser un test d'intrusion avant l'ouverture au-delà de l'étude pilote.
 
-| Fichier | Usage |
-|---|---|
-| `db/schema.sqlite.sql` + `db/seed.sqlite.sql` | Développement local |
-| `db/schema.pg.sql` + `db/seed.pg.sql` | Production Render |
-| `db/demo.sql` / `db/demo_reset.sql` | Données fictives (PostgreSQL) |
+## Ce que ce socle N'EST PAS
+
+C'est un **point de départ solide (~90 % du périmètre V1)**, pas un produit fini :
+il reste l'OAuth Google, les exports, l'écran d'administration des comptes,
+l'onboarding Super-Administrateur, les tests de charge et le déploiement supervisé.
+Un développeur doit accompagner la mise en production.

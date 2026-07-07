@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   actif INTEGER NOT NULL DEFAULT 1,
   echecs_connexion INTEGER NOT NULL DEFAULT 0,
   verrouille_jusqua TEXT,
+  derniere_activite TEXT,
   cree_le TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (etude_id, identifiant)
 );
@@ -127,3 +128,36 @@ CREATE TABLE IF NOT EXISTS referentiels (
   actif INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_ref_etude ON referentiels(etude_id, type_liste, ordre);
+
+CREATE TABLE IF NOT EXISTS parametres_etude (
+  etude_id TEXT PRIMARY KEY REFERENCES etudes(id) ON DELETE CASCADE,
+  conservation_annees INTEGER NOT NULL DEFAULT 10,
+  session_minutes INTEGER NOT NULL DEFAULT 30,
+  acte_simple_s1 INTEGER NOT NULL DEFAULT 20,
+  acte_simple_s2 INTEGER NOT NULL DEFAULT 40,
+  acte_simple_s3 INTEGER NOT NULL DEFAULT 60,
+  acte_complexe_s1 INTEGER NOT NULL DEFAULT 30,
+  acte_complexe_s2 INTEGER NOT NULL DEFAULT 60,
+  acte_complexe_s3 INTEGER NOT NULL DEFAULT 90,
+  succession_s1 INTEGER NOT NULL DEFAULT 180,
+  succession_s2 INTEGER NOT NULL DEFAULT 270,
+  succession_s3 INTEGER NOT NULL DEFAULT 365,
+  appel_s1 INTEGER NOT NULL DEFAULT 3,
+  appel_s2 INTEGER NOT NULL DEFAULT 5,
+  appel_s3 INTEGER NOT NULL DEFAULT 10,
+  couleur_n1 TEXT NOT NULL DEFAULT '#FFF4C2',
+  couleur_n2 TEXT NOT NULL DEFAULT '#FFD9A0',
+  couleur_n3 TEXT NOT NULL DEFAULT '#FF9E9E',
+  couleur_ok TEXT NOT NULL DEFAULT '#E9F7EC',
+  maj_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS demandes_recuperation (
+  id TEXT PRIMARY KEY,
+  etude_id TEXT NOT NULL REFERENCES etudes(id),
+  identifiant TEXT NOT NULL,
+  demande_le TEXT NOT NULL DEFAULT (datetime('now')),
+  code_confirmation TEXT NOT NULL,
+  traite_le TEXT,
+  statut TEXT NOT NULL DEFAULT 'en_attente'
+);

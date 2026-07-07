@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { exigerSession, creerSession } from "@/lib/auth";
 import { withTenant, audit } from "@/lib/db";
-import { actifFalse } from "@/lib/dialect";
 
 export async function POST(req) {
   try {
-    const s = exigerSession();
+    const s = await exigerSession(true); // accessible avec un mot de passe provisoire
     const { actuel, nouveau } = await req.json();
     if (!actuel || !nouveau)
       return NextResponse.json({ erreur: "Mot de passe actuel et nouveau requis." }, { status: 400 });
@@ -23,7 +22,7 @@ export async function POST(req) {
       if (!ok) { const e = new Error("Mot de passe actuel incorrect."); e.status = 401; throw e; }
       const hash = await bcrypt.hash(nouveau, 10);
       const { rows: maj } = await c.query(
-        `UPDATE utilisateurs SET hash_mot_de_passe = $1, doit_changer_mdp = ${actifFalse()} WHERE id = $2 RETURNING *`,
+        `UPDATE utilisateurs SET hash_mot_de_passe = $1, doit_changer_mdp = false WHERE id = $2 RETURNING *`,
         [hash, s.uid]);
       await audit(c, { etudeId: s.etudeId, table: "utilisateurs", ligneId: s.uid,
         action: "modification", apres: { evenement: "changement_mot_de_passe" }, utilisateur: s.uid });

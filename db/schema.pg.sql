@@ -128,7 +128,99 @@ CREATE TABLE IF NOT EXISTS referentiels (
 );
 CREATE INDEX IF NOT EXISTS idx_ref_etude ON referentiels(etude_id, type_liste, ordre);
 
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS parametres_etude (
+  etude_id UUID PRIMARY KEY REFERENCES etudes(id) ON DELETE CASCADE,
+  conservation_annees INT NOT NULL DEFAULT 10 CHECK (conservation_annees BETWEEN 1 AND 10),
+  session_minutes INT NOT NULL DEFAULT 30 CHECK (session_minutes IN (15, 30, 60, 120)),
+  acte_simple_s1 INT NOT NULL DEFAULT 20, acte_simple_s2 INT NOT NULL DEFAULT 40, acte_simple_s3 INT NOT NULL DEFAULT 60,
+  acte_complexe_s1 INT NOT NULL DEFAULT 30, acte_complexe_s2 INT NOT NULL DEFAULT 60, acte_complexe_s3 INT NOT NULL DEFAULT 90,
+  succession_s1 INT NOT NULL DEFAULT 180, succession_s2 INT NOT NULL DEFAULT 270, succession_s3 INT NOT NULL DEFAULT 365,
+  appel_s1 INT NOT NULL DEFAULT 3, appel_s2 INT NOT NULL DEFAULT 5, appel_s3 INT NOT NULL DEFAULT 10,
+  couleur_n1 VARCHAR NOT NULL DEFAULT '#FFF4C2', couleur_n2 VARCHAR NOT NULL DEFAULT '#FFD9A0',
+  couleur_n3 VARCHAR NOT NULL DEFAULT '#FF9E9E', couleur_ok VARCHAR NOT NULL DEFAULT '#E9F7EC',
+  maj_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS demandes_recuperation (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  etude_id UUID NOT NULL REFERENCES etudes(id),
+  identifiant VARCHAR NOT NULL,
+  demande_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  code_confirmation VARCHAR NOT NULL,
+  traite_le TIMESTAMPTZ,
+  statut VARCHAR NOT NULL DEFAULT 'en_attente'
+);
+
 CREATE OR REPLACE FUNCTION prochain_numero_appel(p_etude UUID) RETURNS INT AS $$
   SELECT COALESCE(MAX(numero), 0) + 1 FROM appels_courriers
   WHERE etude_id = p_etude AND annee = EXTRACT(YEAR FROM now());
 $$ LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION auth_lookup(p_identifiant TEXT)
+RETURNS TABLE (id UUID, etude_id UUID, role VARCHAR, nom_affiche VARCHAR, fonction VARCHAR,
+               hash_mot_de_passe VARCHAR, doit_changer_mdp BOOLEAN, echecs_connexion INT,
+               verrouille_jusqua TIMESTAMPTZ, etude_statut VARCHAR, etude_nom VARCHAR)
+LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT u.id, u.etude_id, u.role, u.nom_affiche, u.fonction, u.hash_mot_de_passe,
+         u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua, e.statut, e.nom
+  FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+  WHERE u.identifiant = p_identifiant AND u.actif = true;
+$$;
+
+CREATE OR REPLACE FUNCTION auth_apres_tentative(p_user UUID, p_succes BOOLEAN)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF p_succes THEN
+    UPDATE utilisateurs SET echecs_connexion = 0, verrouille_jusqua = NULL WHERE id = p_user;
+  ELSE
+    UPDATE utilisateurs SET echecs_connexion = echecs_connexion + 1,
+      verrouille_jusqua = CASE
+        WHEN role = 'admin_etude' THEN NULL
+        WHEN echecs_connexion + 1 >= 8 THEN now() + interval '1 hour'
+        WHEN echecs_connexion + 1 >= 5 THEN now() + interval '15 minutes'
+        ELSE verrouille_jusqua END
+    WHERE id = p_user;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION compte_est_actif(p_uid UUID)
+RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+    WHERE u.id = p_uid AND u.actif = true AND e.statut = 'active'
+      AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now()));
+$$;
+
+CREATE OR REPLACE FUNCTION marquer_activite(p_uid UUID)
+RETURNS VOID LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  UPDATE utilisateurs SET derniere_activite = now() WHERE id = p_uid;
+$$;
+
+CREATE OR REPLACE FUNCTION deconnecter_presence(p_uid UUID)
+RETURNS VOID LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  UPDATE utilisateurs SET derniere_activite = NULL WHERE id = p_uid;
+$$;
+
+CREATE OR REPLACE FUNCTION purger_corbeille_expiree(p_etude UUID)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  DELETE FROM actes WHERE etude_id = p_etude AND supprime_le < now() - interval '30 days';
+  DELETE FROM appels_courriers WHERE etude_id = p_etude AND supprime_le < now() - interval '30 days';
+END $$;
+
+CREATE OR REPLACE FUNCTION purger_registres_demo(p_etude UUID, p_utilisateur UUID)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM actes WHERE etude_id = p_etude AND numero_minute = '2026/0201') THEN
+    RAISE EXCEPTION 'Les données présentes ne sont pas celles de la démonstration : effacement refusé.';
+  END IF;
+  DELETE FROM pieces_log WHERE etude_id = p_etude;
+  DELETE FROM acte_parties WHERE etude_id = p_etude;
+  DELETE FROM actes WHERE etude_id = p_etude;
+  DELETE FROM appels_courriers WHERE etude_id = p_etude;
+  INSERT INTO audit_log (etude_id, table_cible, action, nouvelle_valeur, utilisateur)
+  VALUES (p_etude, 'actes', 'suppression', '{"evenement":"effacement_demonstration"}', p_utilisateur);
+END $$;
+

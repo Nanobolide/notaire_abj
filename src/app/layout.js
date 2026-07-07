@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "NOTARIA — Cabinet notarial Me KOUASSI",
-  description: "Outil de gestion interne pour étude notariale : appels, courriers, actes et minutes",
+  title: "NOTARIA — Gestion notariale",
+  description: "Plateforme SaaS multi-études de gestion notariale",
 };
 
 export default function RootLayout({ children }) {
@@ -12,7 +12,9 @@ export default function RootLayout({ children }) {
         {children}
         <footer style={{ textAlign: "center", padding: "14px", fontSize: "11.5px", color: "#8A94A8" }}>
           Outil de suivi interne de l'étude — ne remplace en aucun cas les registres officiels
-          (répertoire des minutes). Données couvertes par le secret professionnel.
+          (répertoire des minutes). Données couvertes par le secret professionnel.{" "}
+          <a href="/mentions-legales" style={{ color: "#8A94A8", textDecoration: "underline" }}>
+            Mentions légales & protection des données (loi 2013-450)</a>.
         </footer>
       </body>
     </html>

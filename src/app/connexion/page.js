@@ -27,10 +27,7 @@ export default function Connexion() {
     <div className="connexion-fond">
       <div className="connexion-boite">
         <h1>NOTARIA</h1>
-        <p className="sous-titre">
-          Cabinet notarial — Étude Me KOUASSI MARLENE K. ELISEE<br />
-          Abidjan, Côte d&apos;Ivoire
-        </p>
+        <p className="sous-titre">Gestion notariale — connexion à votre étude</p>
         <form onSubmit={soumettre}>
           <input placeholder="Identifiant (ex. clerc1)" value={identifiant}
                  onChange={(e) => setIdentifiant(e.target.value)} autoFocus />
@@ -41,6 +38,7 @@ export default function Connexion() {
             {envoi ? "Connexion…" : "Se connecter"}
           </button>
         </form>
+        <p style={{ marginTop: 10, fontSize: 13 }}><a href="/mot-de-passe-oublie">Mot de passe oublié ?</a></p>
         <p className="sous-titre" style={{ marginTop: 14 }}>
           Mot de passe oublié ? Adressez-vous au Notaire de votre étude —
           la réinitialisation ne passe jamais par e-mail.

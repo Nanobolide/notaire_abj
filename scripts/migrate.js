@@ -25,6 +25,7 @@ async function connectWithRetry(client, attempts = 5) {
 }
 
 async function migratePg() {
+  const bcrypt = require("bcryptjs");
   const { Client } = require("pg");
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL manquant pour la migration PostgreSQL.");
@@ -44,11 +45,22 @@ async function migratePg() {
     }
   }
 
+  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
+
+  // Mot de passe démo pour les comptes seed (test à distance Render)
+  const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+  await client.query(
+    `UPDATE utilisateurs SET hash_mot_de_passe = $1
+     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
+    [hash]
+  );
+
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
 }
 
 function migrateSqlite() {
+  const bcrypt = require("bcryptjs");
   const { DatabaseSync } = require("node:sqlite");
   const DB_PATH = process.env.DATABASE_PATH || path.join(ROOT, "data", "notaria.db");
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -60,6 +72,12 @@ function migrateSqlite() {
     console.log(`→ ${file}`);
     db.exec(fs.readFileSync(path.join(ROOT, file), "utf8"));
   }
+  try { db.exec("ALTER TABLE utilisateurs ADD COLUMN derniere_activite TEXT"); } catch {}
+  const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+  db.prepare(
+    `UPDATE utilisateurs SET hash_mot_de_passe = ?
+     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`
+  ).run(hash);
   if (!fs.existsSync(path.join(ROOT, ".env"))
     && !process.env.JWT_SECRET && !process.env.RENDER && process.env.NODE_ENV !== "production") {
     const jwt = crypto.randomBytes(32).toString("hex");

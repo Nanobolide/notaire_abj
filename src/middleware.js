@@ -9,13 +9,16 @@ function decodePayload(token) {
   }
 }
 
-/** Protège toutes les pages sauf la connexion et les routes publiques. */
 export function middleware(req) {
   const session = req.cookies.get("notaria_session");
   const { pathname } = req.nextUrl;
-  const publique = pathname === "/connexion" || pathname === "/changer-mot-de-passe"
+  const publique = pathname === "/connexion"
+    || pathname === "/changer-mot-de-passe"
+    || pathname === "/mot-de-passe-oublie"
+    || pathname === "/mentions-legales"
     || pathname === "/api/health"
-    || pathname.startsWith("/api/auth");
+    || pathname.startsWith("/api/auth")
+    || pathname === "/api/recuperation";
 
   if (!session && !publique)
     return NextResponse.redirect(new URL("/connexion", req.url));

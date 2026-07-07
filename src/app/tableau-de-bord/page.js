@@ -24,11 +24,31 @@ const Compteur = ({ valeur, libelle, niveau }) => (
 export default function TableauDeBord() {
   const [s, setS] = useState(null);
   const [erreur, setErreur] = useState("");
-  useEffect(() => {
+  const [admin, setAdmin] = useState(false);
+  const [demoEnCours, setDemoEnCours] = useState(false);
+  const charger = () =>
     fetch("/api/dashboard").then((r) => r.json())
       .then((d) => (d.erreur ? setErreur(d.erreur) : setS(d)))
       .catch(() => setErreur("Chargement impossible."));
-  }, []);
+  useEffect(() => { charger(); }, []);
+  useEffect(() => { fetch("/api/session").then((r) => r.json())
+    .then((d) => setAdmin(d.role === "admin_etude" || d.role === "super_admin")); }, []);
+
+  const chargerDemo = async () => {
+    setDemoEnCours(true); setErreur("");
+    const rep = await fetch("/api/demo", { method: "POST" });
+    const d = await rep.json();
+    if (!rep.ok) setErreur(d.erreur);
+    setDemoEnCours(false); charger();
+  };
+  const effacerDemo = async () => {
+    if (!confirm("Effacer TOUTES les données de démonstration ? Les registres redeviendront vides.")) return;
+    setDemoEnCours(true); setErreur("");
+    const rep = await fetch("/api/demo", { method: "DELETE" });
+    const d = await rep.json();
+    if (!rep.ok) setErreur(d.erreur);
+    setDemoEnCours(false); charger();
+  };
 
   return (
     <>
@@ -39,6 +59,46 @@ export default function TableauDeBord() {
         {erreur && <div className="erreur">{erreur}</div>}
         {!s && !erreur && <p>Chargement…</p>}
         {s && (<>
+          {s.presence && (
+            <div className="presence-carte">
+              <h2>👥 Qui est connecté en ce moment</h2>
+              <div className="desc">Visible par le Notaire uniquement — « connecté » = actif il y a moins de 5 minutes.</div>
+              {s.presence.map((u, i) => {
+                const enLigne = u.en_ligne;
+                const quand = u.derniere_activite
+                  ? new Date(u.derniere_activite).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
+                  : "jamais connecté";
+                const roleTxt = u.role === "admin_etude" ? "Notaire" : (u.fonction || "Collaborateur");
+                return (
+                  <div className="pers" key={i}>
+                    <span className={"pt " + (enLigne ? "on" : "off")} />
+                    <span className="p-nom">{u.nom_affiche}</span>
+                    <span className="p-role">{roleTxt}</span>
+                    <span className={"p-etat " + (enLigne ? "vert" : "gris")}>
+                      {enLigne ? "● Connecté" : "Hors ligne — " + quand}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {admin && Number(s.actes.total) === 0 && Number(s.appels.total) === 0 && (
+            <div className="carte" style={{ borderLeft: "4px solid var(--or)", borderRadius: "0 8px 8px 0" }}>
+              <h1 style={{ fontSize: 15 }}>Registres vides — voulez-vous tester avec des données fictives ?</h1>
+              <p className="sous-titre">Charge 30 actes et 30 appels de démonstration (avril-juin 2026), identiques
+                au classeur Excel, pour voir couleurs, barèmes et tableau de bord en action.</p>
+              <button className="bouton" onClick={chargerDemo} disabled={demoEnCours}>
+                {demoEnCours ? "Chargement…" : "Charger les données de démonstration"}
+              </button>
+            </div>
+          )}
+          {admin && Number(s.actes.total) > 0 && (
+            <p className="sous-titre" style={{ textAlign: "right" }}>
+              <button className="bouton secondaire" style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={effacerDemo} disabled={demoEnCours}>
+                {demoEnCours ? "…" : "Effacer les données de démonstration"}
+              </button>
+            </p>
+          )}
 
           {/* ======== ① ACTES ======== */}
           <div className="bandeau-section">① SUIVI DES ACTES ET MINUTES</div>

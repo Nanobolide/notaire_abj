@@ -1,125 +1,73 @@
 /**
- * TEST D'ISOLATION MULTI-ÉTUDES — exigence critique pour un cabinet notarial.
- * Vérifie que les requêtes applicatives (filtre etude_id) empêchent toute fuite
- * entre études. Compatible SQLite (local) et PostgreSQL (production Render).
- * npm run test:isolation
+ * TEST D'ISOLATION MULTI-TENANT — exigence critique n°1.
+ * Crée deux études fictives (Alpha, Bêta), insère une donnée dans chacune,
+ * puis vérifie qu'une session armée sur Alpha ne peut JAMAIS lire ni écrire Bêta.
+ * À exécuter avec le rôle applicatif (non superuser) : npm run test:isolation
+ * Le processus sort en erreur (code 1) à la moindre fuite — critère bloquant de recette.
  */
-const path = require("path");
-const { randomUUID } = require("crypto");
+const { Pool } = require("pg");
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const pgSslOptions = require("../scripts/pg-ssl");
-const isPg = !!process.env.DATABASE_URL;
-const A = "11111111-1111-1111-1111-111111111111";
-const B = "bbbbbbbb-0000-0000-0000-000000000002";
-
-async function getClient() {
-  if (isPg) {
-    const { Pool } = require("pg");
-    const url = process.env.DATABASE_URL;
-    const pool = new Pool({
-      connectionString: url,
-      ssl: pgSslOptions(url),
-    });
-    return { pool, query: (sql, p) => pool.query(sql, p), end: () => pool.end() };
-  }
-  const { DatabaseSync } = require("node:sqlite");
-  const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "..", "data", "notaria.db");
-  const db = new DatabaseSync(DB_PATH);
-  const query = (sql, params = []) => {
-    const bound = params.map((p) => (p === undefined ? null : p));
-    const expanded = [];
-    const s = sql.replace(/\$(\d+)/g, (_, n) => {
-      expanded.push(bound[parseInt(n, 10) - 1]);
-      return "?";
-    });
-    const head = sql.trim().split(/\s+/)[0].toUpperCase();
-    if (head === "SELECT" || /RETURNING/i.test(sql)) {
-      const rows = db.prepare(s).all(...expanded);
-      return { rows, rowCount: rows.length };
-    }
-    const info = db.prepare(s).run(...expanded);
-    return { rows: [], rowCount: info.changes };
-  };
-  return { db, query, end: () => {} };
-}
-
-function insertAppel(query, etudeId, clientNom) {
-  const id = randomUUID();
-  if (isPg) {
-    return query(
-      `INSERT INTO appels_courriers (etude_id, numero, type_flux, client_nom)
-       VALUES ($1, (SELECT COALESCE(MAX(numero),0)+1 FROM appels_courriers WHERE etude_id = $1), 'Appel Téléphonique', $2)
-       RETURNING id`,
-      [etudeId, clientNom]
-    );
-  }
-  return query(
-    `INSERT INTO appels_courriers (id, etude_id, numero, type_flux, client_nom)
-     VALUES ($1, $2,
-       (SELECT COALESCE(MAX(numero),0)+1 FROM appels_courriers WHERE etude_id = $2),
-       'Appel Téléphonique', $3)
-     RETURNING id`,
-    [id, etudeId, clientNom]
-  );
+async function tenant(client, etudeId) {
+  await client.query("SELECT set_config('app.current_etude_id', $1, true)", [etudeId]);
 }
 
 (async () => {
-  const { query, end } = await getClient();
+  const A = "aaaaaaaa-0000-0000-0000-000000000001";
+  const B = "bbbbbbbb-0000-0000-0000-000000000002";
+
+  // Les études fictives sont créées via une connexion admin (le rôle applicatif
+  // n'a volontairement AUCUN droit d'écriture sur la table etudes).
+  const adminUrl = process.env.ADMIN_DATABASE_URL;
+  if (adminUrl) {
+    const admin = new Pool({ connectionString: adminUrl });
+    await admin.query(`INSERT INTO etudes (id, nom) VALUES ($1,'Étude Alpha'),($2,'Étude Bêta')
+                       ON CONFLICT DO NOTHING`, [A, B]);
+    await admin.end();
+  }
+
+  const c = await pool.connect();
   let echecs = 0;
   const ok = (m) => console.log("  ✅ " + m);
   const ko = (m) => { console.error("  ❌ FUITE : " + m); echecs++; };
+  try {
+    await c.query("BEGIN");
 
-  console.log(isPg ? "→ Test sur PostgreSQL" : "→ Test sur SQLite");
+    // Une entrée dans chaque étude (session armée sur la bonne étude à chaque fois)
+    await tenant(c, A);
+    await c.query(`INSERT INTO appels_courriers (etude_id, numero, type_flux, client_nom)
+                   VALUES ($1, 1, 'Appel Téléphonique', 'Client ALPHA')`, [A]);
+    await tenant(c, B);
+    await c.query(`INSERT INTO appels_courriers (etude_id, numero, type_flux, client_nom)
+                   VALUES ($1, 1, 'Appel Téléphonique', 'Client BÊTA')`, [B]);
 
-  if (isPg) {
-    await query(
-      `INSERT INTO etudes (id, nom) VALUES ($1,'Étude Bêta test') ON CONFLICT DO NOTHING`,
-      [B]
-    );
-  } else {
-    await query(`INSERT OR IGNORE INTO etudes (id, nom) VALUES ($1, $2)`, [B, "Étude Bêta test"]);
-  }
+    console.log("Test 1 — lecture croisée :");
+    await tenant(c, A);
+    const { rows } = await c.query(`SELECT client_nom FROM appels_courriers`);
+    if (rows.some((r) => r.client_nom.includes("BÊTA"))) ko("Alpha voit les données de Bêta.");
+    else ok("Alpha ne voit que ses propres données (" + rows.length + " ligne(s)).");
 
-  await insertAppel(query, A, "Client ALPHA isolation");
-  await insertAppel(query, B, "Client BÊTA isolation");
+    console.log("Test 2 — écriture croisée :");
+    await c.query("SAVEPOINT intrusion");
+    try {
+      await c.query(`INSERT INTO appels_courriers (etude_id, numero, type_flux, client_nom)
+                     VALUES ($1, 99, 'Appel Téléphonique', 'INTRUSION')`, [B]);
+      ko("Alpha a pu écrire dans Bêta.");
+    } catch {
+      ok("Écriture dans une autre étude refusée par le moteur.");
+      await c.query("ROLLBACK TO SAVEPOINT intrusion");
+    }
 
-  console.log("Test 1 — lecture filtrée par etude_id :");
-  const { rows: lusA } = await query(
-    `SELECT client_nom FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL`,
-    [A]
-  );
-  if (lusA.some((r) => r.client_nom.includes("BÊTA"))) ko("L'étude A voit des données de B.");
-  else ok(`Étude A ne voit que ses lignes (${lusA.length} entrée(s)).`);
-
-  console.log("Test 2 — modification croisée (WHERE etude_id = session) :");
-  const { rows: betaRows } = await query(
-    `SELECT id FROM appels_courriers WHERE etude_id = $1 AND client_nom LIKE '%BÊTA%' LIMIT 1`,
-    [B]
-  );
-  if (betaRows[0]) {
-    const { rowCount } = await query(
-      `UPDATE appels_courriers SET observations = 'PIRATÉ' WHERE id = $1 AND etude_id = $2`,
-      [betaRows[0].id, A]
-    );
-    if (rowCount > 0) ko("Modification d'une ligne d'une autre étude possible.");
+    console.log("Test 3 — modification croisée :");
+    const upd = await c.query(`UPDATE appels_courriers SET observations = 'PIRATÉ'
+                               WHERE etude_id = $1 RETURNING id`, [B]);
+    if (upd.rowCount > 0) ko("Alpha a modifié des lignes de Bêta.");
     else ok("Aucune ligne d'une autre étude modifiable (0 ligne touchée).");
-  } else ok("Pas de ligne Bêta à tester (ignoré).");
 
-  console.log("Test 3 — suppression logique croisée :");
-  if (betaRows[0]) {
-    const nowSql = isPg ? "now()" : "datetime('now')";
-    const { rowCount } = await query(
-      `UPDATE appels_courriers SET supprime_le = ${nowSql} WHERE id = $1 AND etude_id = $2`,
-      [betaRows[0].id, A]
-    );
-    if (rowCount > 0) ko("Suppression logique d'une autre étude possible.");
-    else ok("Suppression logique d'une autre étude refusée.");
+    await c.query("ROLLBACK"); // rien ne persiste
+  } finally {
+    c.release(); await pool.end();
   }
-
-  await end();
-  if (echecs > 0) {
-    console.error(`\n${echecs} fuite(s) — LIVRAISON BLOQUÉE.`);
-    process.exit(1);
-  }
+  if (echecs > 0) { console.error(`\n${echecs} fuite(s) détectée(s) — LIVRAISON BLOQUÉE.`); process.exit(1); }
   console.log("\nIsolation vérifiée : aucune fuite entre études.");
 })().catch((e) => { console.error("Erreur du test :", e.message); process.exit(1); });

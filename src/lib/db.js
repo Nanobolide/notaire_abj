@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 const isPg = !!process.env.DATABASE_URL;
 const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "notaria.db");
 
-let pool;
+let pgPool;
 let sqlite;
 
 function pgSsl() {
@@ -49,8 +49,8 @@ function sqliteQuery(sql, params = []) {
 }
 
 async function pgQuery(sql, params = []) {
-  if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
-  return pool.query(sql, params);
+  if (!pgPool) pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
+  return pgPool.query(sql, params);
 }
 
 export function newId() {
@@ -61,14 +61,15 @@ export async function query(sql, params = []) {
   return isPg ? pgQuery(sql, params) : sqliteQuery(sql, params);
 }
 
-/** Exécute `fn(client)` dans une transaction (isolation par etude_id dans les requêtes). */
+/** Exécute `fn(client)` dans une transaction (RLS armée sur PostgreSQL). */
 export async function withTenant(etudeId, fn) {
   const client = { etudeId, query };
   if (isPg) {
-    if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
-    const c = await pool.connect();
+    if (!pgPool) pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
+    const c = await pgPool.connect();
     try {
       await c.query("BEGIN");
+      await c.query("SELECT set_config('app.current_etude_id', $1, true)", [etudeId]);
       const wrapped = { etudeId, query: (sql, params) => c.query(sql, params) };
       const result = await fn(wrapped);
       await c.query("COMMIT");
@@ -100,4 +101,56 @@ export async function audit(client, { etudeId, table, ligneId, action, avant, ap
   );
 }
 
-export default { query, withTenant, newId, audit };
+/** C7 — compte actif et non verrouillé (révocation immédiate). */
+export async function verifierCompteActif(uid) {
+  if (isPg) {
+    try {
+      const { rows } = await query(`SELECT compte_est_actif($1) AS ok`, [uid]);
+      const ok = rows[0]?.ok === true;
+      if (ok) { try { await query(`SELECT marquer_activite($1)`, [uid]); } catch {} }
+      return ok;
+    } catch {
+      // Schéma sans fonctions RLS : repli requête directe
+    }
+  }
+  const nowSql = isPg ? "now()" : "datetime('now')";
+  const actifSql = isPg ? "u.actif = true" : "u.actif = 1";
+  const { rows } = await query(
+    `SELECT 1 FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+     WHERE u.id = $1 AND ${actifSql} AND e.statut = 'active'
+       AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= ${nowSql})`,
+    [uid]
+  );
+  const ok = rows.length > 0;
+  if (ok) {
+    const maj = isPg ? "now()" : "datetime('now')";
+    try { await query(`UPDATE utilisateurs SET derniere_activite = ${maj} WHERE id = $1`, [uid]); } catch {}
+  }
+  return ok;
+}
+
+export async function deconnecterPresence(uid) {
+  if (isPg) {
+    try { await query(`SELECT deconnecter_presence($1)`, [uid]); return; } catch {}
+  }
+  await query(`UPDATE utilisateurs SET derniere_activite = NULL WHERE id = $1`, [uid]);
+}
+
+export async function purgerCorbeilleExpiree(etudeId) {
+  if (isPg) {
+    try { await query(`SELECT purger_corbeille_expiree($1)`, [etudeId]); return; } catch {}
+    await query(
+      `DELETE FROM actes WHERE etude_id = $1 AND supprime_le < now() - interval '30 days'`, [etudeId]);
+    await query(
+      `DELETE FROM appels_courriers WHERE etude_id = $1 AND supprime_le < now() - interval '30 days'`, [etudeId]);
+    return;
+  }
+  await query(
+    `DELETE FROM actes WHERE etude_id = $1 AND supprime_le < datetime('now', '-30 days')`, [etudeId]);
+  await query(
+    `DELETE FROM appels_courriers WHERE etude_id = $1 AND supprime_le < datetime('now', '-30 days')`, [etudeId]);
+}
+
+const db = { query, withTenant, newId, audit, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
+export const pool = db;
+export default db;
