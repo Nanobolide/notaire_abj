@@ -131,12 +131,15 @@ Configuré via `render.yaml` (plan free) :
    npm install
    npm run dev          # migre + http://localhost:3000
    ```
-   **Données de démonstration — EN UN CLIC** : connectez-vous en tant que `notaire`,
-   et sur le tableau de bord (registres vides) cliquez « Charger les données de
-   démonstration » : 30 actes + 30 appels (avril-juin 2026) identiques au classeur Excel.
-   Un bouton « Effacer les données de démonstration » fait l'inverse — il refuse d'agir
-   si les données présentes ne sont pas celles de la démo (protection des vraies données).
-   Alternative en ligne de commande (PostgreSQL uniquement) : `db/demo.sql` et `db/demo_reset.sql`.
+## Données de démonstration (présentation client)
+
+À chaque migration, si le marqueur `2026/0201` est absent, **30 actes** et **30 appels**
+fictifs (avril-juin 2026) sont chargés automatiquement — tableau de bord, couleurs,
+finances et registres prêts pour une démo.
+
+- Rechargement : `npm run db:migrate` (après effacement via l'API démo ou base vide)
+- Effacement : bouton « Effacer la démonstration » sur le tableau de bord (Notaire)
+
 4. Se connecter :
    - `notaire` / `ChangezMoi2026!` (Administrateur d'étude)
    - `secretariat`, `clerc1`, `accueil` / même mot de passe (collaborateurs)

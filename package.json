@@ -12,6 +12,7 @@
     "prestart": "node scripts/migrate.js",
     "start": "next start",
     "db:migrate": "node scripts/migrate.js",
+    "db:seed-demo": "node scripts/migrate.js",
     "db:init": "node scripts/migrate.js",
     "db:verify": "node scripts/verify-db.js",
     "test:isolation": "node tests/isolation.js"

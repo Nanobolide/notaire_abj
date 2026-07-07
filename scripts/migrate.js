@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const pgSslOptions = require("./pg-ssl");
+const { seedDemo } = require("./seed-demo");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -55,11 +56,18 @@ async function migratePg() {
     [hash]
   );
 
+  console.log("→ seed-demo (dossiers de démonstration)");
+  await seedDemo((sql, params) => client.query(sql, params), true);
+
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
 }
 
 function migrateSqlite() {
+  return migrateSqliteAsync();
+}
+
+async function migrateSqliteAsync() {
   const bcrypt = require("bcryptjs");
   const { DatabaseSync } = require("node:sqlite");
   const DB_PATH = process.env.DATABASE_PATH || path.join(ROOT, "data", "notaria.db");
@@ -78,6 +86,24 @@ function migrateSqlite() {
     `UPDATE utilisateurs SET hash_mot_de_passe = ?
      WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`
   ).run(hash);
+
+  const queryFn = (sql, params = []) => {
+    const bound = params.map((p) => (p === undefined ? null : p));
+    const expanded = [];
+    const s = sql.replace(/\$(\d+)/g, (_, n) => {
+      expanded.push(bound[parseInt(n, 10) - 1]);
+      return "?";
+    });
+    const head = sql.trim().split(/\s+/)[0].toUpperCase();
+    if (head === "SELECT" || /RETURNING/i.test(sql)) {
+      return { rows: db.prepare(s).all(...expanded) };
+    }
+    db.prepare(s).run(...expanded);
+    return { rows: [] };
+  };
+  console.log("→ seed-demo (dossiers de démonstration)");
+  await seedDemo(queryFn, false);
+
   if (!fs.existsSync(path.join(ROOT, ".env"))
     && !process.env.JWT_SECRET && !process.env.RENDER && process.env.NODE_ENV !== "production") {
     const jwt = crypto.randomBytes(32).toString("hex");
@@ -91,7 +117,7 @@ function migrateSqlite() {
 (async () => {
   try {
     if (process.env.DATABASE_URL) await migratePg();
-    else migrateSqlite();
+    else await migrateSqliteAsync();
   } catch (err) {
     console.error("Erreur migration :", err.message);
     process.exit(1);

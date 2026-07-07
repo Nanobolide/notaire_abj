@@ -47,7 +47,7 @@ export async function POST() {
           : `INSERT INTO actes (id, etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
              nature_acte, complexite, responsable, conservation_fonciere, progression, termine_le,
              valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, ${termineSql},
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, ${termineSql},
                    $13,$14,$15,$16,$17,$18,$19) RETURNING id`;
         const { rows: ins } = await c.query(insertSql, params);
         for (let i = 0; i < a.parties.length; i++) {
