@@ -31,7 +31,7 @@ export default function Comptes() {
     setErreur(""); setInfo("");
     let corps = { action: act };
     if (act === "reinitialiser") {
-      const mdp = prompt("Nouveau mot de passe PROVISOIRE (au moins 10 caractères) :");
+      const mdp = prompt("Nouveau mot de passe PROVISOIRE (au moins 3 caractères) :");
       if (!mdp) return;
       corps.motDePasseProvisoire = mdp;
     }
@@ -58,7 +58,7 @@ export default function Comptes() {
               <input value={form.nom_affiche} onChange={maj("nom_affiche")} placeholder="ex. Mme Koffi Awa" required /></label>
             <label>Fonction
               <input value={form.fonction} onChange={maj("fonction")} placeholder="ex. Clerc, Stagiaire, Accueil…" /></label>
-            <label>Mot de passe provisoire * (10 caractères min.)
+            <label>Mot de passe provisoire * (3 caractères min.)
               <input type="password" value={form.motDePasseProvisoire} onChange={maj("motDePasseProvisoire")} required /></label>
             <div><button className="bouton">Créer le compte</button></div>
           </form>

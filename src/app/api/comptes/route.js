@@ -25,8 +25,8 @@ export async function POST(req) {
       return NextResponse.json({ erreur: "Identifiant, nom et mot de passe provisoire requis." }, { status: 400 });
     if (!/^[a-z0-9._-]{3,30}$/.test(identifiant))
       return NextResponse.json({ erreur: "Identifiant : 3 à 30 caractères, minuscules, chiffres, . _ - uniquement." }, { status: 400 });
-    if (motDePasseProvisoire.length < 10)
-      return NextResponse.json({ erreur: "Mot de passe provisoire : au moins 10 caractères." }, { status: 400 });
+    if (motDePasseProvisoire.length < 3)
+      return NextResponse.json({ erreur: "Mot de passe provisoire : au moins 3 caractères." }, { status: 400 });
     const hash = await bcrypt.hash(motDePasseProvisoire, 10);
     const ligne = await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(

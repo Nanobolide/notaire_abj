@@ -30,7 +30,7 @@ export default function ChangerMotDePasse() {
         <h1>NOTARIA</h1>
         <p className="sous-titre">
           <strong>Première connexion : changez votre mot de passe.</strong><br />
-          Au moins 10 caractères, avec lettres et chiffres.
+          Au moins 3 caractères, avec lettres et chiffres.
         </p>
         <form onSubmit={soumettre}>
           <input type="password" placeholder="Mot de passe actuel" value={actuel}

@@ -20,8 +20,8 @@ export async function PATCH(req, { params }) {
       else if (action === "deverrouiller")
         sql = `UPDATE utilisateurs SET verrouille_jusqua = NULL, echecs_connexion = 0 WHERE id = $1`;
       else if (action === "reinitialiser") {
-        if (!motDePasseProvisoire || motDePasseProvisoire.length < 10) {
-          const e = new Error("Mot de passe provisoire : au moins 10 caractères."); e.status = 400; throw e;
+        if (!motDePasseProvisoire || motDePasseProvisoire.length < 3) {
+          const e = new Error("Mot de passe provisoire : au moins 3 caractères."); e.status = 400; throw e;
         }
         const hash = await bcrypt.hash(motDePasseProvisoire, 10);
         vals = [hash, params.id];
