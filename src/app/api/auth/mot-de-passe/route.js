@@ -9,8 +9,8 @@ export async function POST(req) {
     const { actuel, nouveau } = await req.json();
     if (!actuel || !nouveau)
       return NextResponse.json({ erreur: "Mot de passe actuel et nouveau requis." }, { status: 400 });
-    if (nouveau.length < 3 || !/[A-Za-z]/.test(nouveau) || !/[0-9]/.test(nouveau))
-      return NextResponse.json({ erreur: "Le nouveau mot de passe doit faire au moins 3 caractères et contenir lettres et chiffres." }, { status: 400 });
+    if (nouveau.length < 8 || !/[A-Za-z]/.test(nouveau) || !/[0-9]/.test(nouveau))
+      return NextResponse.json({ erreur: "Le nouveau mot de passe doit faire au moins 8 caractères et contenir lettres et chiffres." }, { status: 400 });
     if (nouveau === actuel)
       return NextResponse.json({ erreur: "Le nouveau mot de passe doit être différent de l'actuel." }, { status: 400 });
 

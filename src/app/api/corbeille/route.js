@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
-import { exigerAdmin } from "@/lib/auth";
+import { exigerNotaire } from "@/lib/auth";
 import { withTenant, audit, purgerCorbeilleExpiree } from "@/lib/db";
 import { isPg, today } from "@/lib/dialect";
 
 const TABLES = { acte: "actes", appel: "appels_courriers" };
 
+/** Contenu de la corbeille (30 jours) — Notaire uniquement. */
 export async function GET() {
   try {
-    const s = await exigerAdmin();
+    const s = await exigerNotaire();
     const joursRestants = isPg()
       ? `GREATEST(0, 30 - (${today()} - supprime_le::date))`
       : `MAX(0, 30 - cast(julianday(${today()}) - julianday(date(supprime_le)) as integer))`;
@@ -31,9 +32,10 @@ export async function GET() {
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
 
+/** Restauration ({type:'acte'|'appel', id}) ou suppression définitive ({..., definitif:true}). */
 export async function POST(req) {
   try {
-    const s = await exigerAdmin();
+    const s = await exigerNotaire();
     const { type, id, definitif } = await req.json();
     const table = TABLES[type];
     if (!table || !id) return NextResponse.json({ erreur: "Type ou identifiant manquant." }, { status: 400 });
@@ -58,7 +60,7 @@ export async function POST(req) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e.code === "23505")
-      return NextResponse.json({ erreur: "Restauration impossible : un élément actif porte déjà ce numéro." }, { status: 409 });
+      return NextResponse.json({ erreur: "Restauration impossible : un élément actif porte déjà ce numéro. Modifiez-le d'abord, puis restaurez." }, { status: 409 });
     return NextResponse.json({ erreur: e.message }, { status: e.status || 500 });
   }
 }

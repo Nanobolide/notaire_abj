@@ -9,6 +9,7 @@ function decodePayload(token) {
   }
 }
 
+/** Protège toutes les pages sauf la connexion et les routes publiques. */
 export function middleware(req) {
   const session = req.cookies.get("notaria_session");
   const { pathname } = req.nextUrl;
