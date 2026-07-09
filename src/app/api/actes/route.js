@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
 import { voitRegistreActes, filtrerActe, voitMontants, saisitPrevision, plafondReglement } from "@/lib/acces";
 import { withTenant, audit, newId } from "@/lib/db";
-import { isPg } from "@/lib/dialect";
+import { isPg, depuisMinutes } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
@@ -67,7 +67,7 @@ export async function POST(req) {
       const doublon = await withTenant(s.etudeId, async (c) =>
         (await c.query(
           `SELECT numero_minute FROM actes WHERE etude_id = $1 AND supprime_le IS NULL
-             AND (numero_minute = $2 OR (nature_acte = $3 AND cree_le > now() - interval '5 minutes'))
+             AND (numero_minute = $2 OR (nature_acte = $3 AND cree_le > ${depuisMinutes(5)}))
            LIMIT 1`, [s.etudeId, d.numero_minute, d.nature_acte || null])).rows[0]);
       if (doublon)
         return NextResponse.json({ doublon: true,

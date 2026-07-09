@@ -30,6 +30,13 @@ export function actifFalse() {
   return isPg() ? "false" : "0";
 }
 
+/** Fenêtre récente (anti-doublon) : now() - interval en PG, datetime() en SQLite. */
+export function depuisMinutes(minutes) {
+  return isPg()
+    ? `now() - interval '${minutes} minutes'`
+    : `datetime('now', '-${minutes} minutes')`;
+}
+
 export function lockAccountSql() {
   return isPg()
     ? "verrouille_jusqua = now() + interval '100 years'"
