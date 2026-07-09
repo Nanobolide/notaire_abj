@@ -1,5 +1,5 @@
 /**
- * Matrice centralisee des droits NOTARIA (V3 + socle v3.0).
+ * Matrice centralisee des droits NOTARIA (V3 + socle v3.1).
  * Toute autorisation doit passer par ce module.
  */
 export const NIVEAUX = ["administrateur", "notaire_salarie", "comptable", "standard"];
@@ -10,12 +10,13 @@ export const FONCTIONS = [
   "Formaliste", "Comptable", "Archiviste", "Secrétariat", "Accueil",
 ];
 
+/** P0.3 — Tolérant aux libellés Notaire / Clerc (pas de liste figée). */
+export const estRedacteur = (fonction) => /^(notaire|clerc)/i.test((fonction || "").trim());
+
 export const FONCTIONS_REDACTRICES = [
   "Notaire principal", "Notaire salarié", "Clerc de 1ère catégorie",
   "Clerc 2", "Clerc 3", "Clerc 4", "Clerc 5",
 ];
-
-export const estRedacteur = (fonction) => FONCTIONS_REDACTRICES.includes(fonction);
 
 const niveau = (s) => s?.niveauAcces || (s?.role === "admin_etude" ? "administrateur" : "standard");
 
@@ -27,18 +28,16 @@ export const estAccueil = (s) => s?.fonction === "Accueil";
 
 export const voitMontants = (s) => estNotaire(s) || estComptable(s);
 export const voitRegistreActes = (s) => !estAccueil(s);
-export const voitRegistreAppels = (s) => !estComptable(s);
+
+/** P2.5 — Le Comptable accède aussi au registre des appels. */
+export const voitRegistreAppels = (s) => true;
+
 export const voitTableauActes = (s) => estNotaire(s);
-export const voitTableauAppels = (s) => !estComptable(s);
+export const voitTableauAppels = (s) => true;
 export const voitFinancier = (s) => estNotaire(s) || estComptable(s);
 
-/** Prévision : frais annoncés et versé — Clerc rédacteur inclus. */
 export const saisitPrevision = (s) => estNotaire(s) || estComptable(s) || estRedacteur(s?.fonction);
-
-/** C17 — montants de dépenses : Notaire et Comptable seulement. */
 export const saisitDepenses = (s) => estNotaire(s) || estComptable(s);
-
-/** Statut des formalités : Formaliste, Notaire, Comptable. */
 export const modifieFormalites = (s) => estNotaire(s) || estComptable(s) || estFormaliste(s);
 
 export const gereComptes = (s) => estAdministrateur(s);
@@ -52,7 +51,6 @@ const CHAMPS_VENTILATION = [
 ];
 
 const CHAMPS_PREVISION = ["valeur_acte", "honoraires_totaux", "montant_regle", "statut_paiement"];
-const CHAMPS_CONFIDENTIELS = ["observations", "difficultes"];
 
 export function filtrerActe(ligne, s) {
   if (!ligne) return ligne;
@@ -60,14 +58,20 @@ export function filtrerActe(ligne, s) {
   if (!voitMontants(s)) for (const c of CHAMPS_VENTILATION) delete copie[c];
   if (!saisitPrevision(s)) for (const c of CHAMPS_PREVISION) delete copie[c];
   if (!voitMontants(s) && !estFormaliste(s)) delete copie.depenses_formalites;
-  if (estComptable(s)) for (const c of CHAMPS_CONFIDENTIELS) delete copie[c];
   return copie;
 }
 
-/** C20 — plafond du montant réglé (ventilation prioritaire sur prévision). */
+/** C20 — plafond du montant réglé (total client prioritaire, ventilation en secours). */
 export function plafondReglement(d) {
   const n = (v) => Number(v || 0);
+  const totalFrais = n(d.honoraires_totaux);
   const ventile = n(d.emoluments) + n(d.droits_etat) + n(d.debours) +
                   n(d.prestations_annexes) + n(d.autres_depenses);
-  return ventile > 0 ? ventile : n(d.honoraires_totaux);
+  return totalFrais > 0 ? totalFrais : ventile;
+}
+
+export function estVentile(d) {
+  const n = (v) => Number(v || 0);
+  return n(d.emoluments) + n(d.droits_etat) + n(d.debours) +
+         n(d.prestations_annexes) + n(d.autres_depenses) > 0;
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Entete from "@/components/Entete";
+import { trier, fleche } from "@/lib/tri";
 import { lireJson } from "@/lib/http";
 import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
 import { couleurActe, joursEcoules, respectEcheance, resteAPayer, formatFcfa } from "@/lib/regles";
@@ -38,6 +39,9 @@ function Actes() {
   const [voitArgent, setVoitArgent] = useState(false);
   const [peutFormalites, setPeutFormalites] = useState(false);
   const [peutPrevision, setPeutPrevision] = useState(false);
+  const [tri, setTri] = useState({ champ: null, sens: "asc" });
+  const clicTri = (champ) => setTri((t) =>
+    t.champ === champ ? { champ, sens: t.sens === "asc" ? "desc" : "asc" } : { champ, sens: "asc" });
   const [param, setParam] = useState(null);
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
@@ -204,7 +208,7 @@ function Actes() {
               <select value={form.complexite} onChange={maj("complexite")} disabled={form.nature_acte === "Succession"}>
                 <option>Simple</option><option>Complexe</option>
               </select></label>
-            <label>Responsable {sel("responsable", form.responsable, maj("responsable"))}</label>
+            <label>Responsable {sel("responsables_actes", form.responsable, maj("responsable"))}</label>
             <label>Conservation Foncière {sel("conservation_fonciere", form.conservation_fonciere, maj("conservation_fonciere"))}</label>
             <label>Étape / Statut {sel("progression", form.progression, maj("progression"))}</label>
             {form.parties.map((p, i) => (
@@ -358,8 +362,8 @@ function Actes() {
         <table className="registre">
           <thead>
             <tr>
-              <th>N° minute</th><th>N° dossier</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
-              <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Formalités</th><th>Délai (j)</th>
+              <th onClick={() => clicTri("numero_minute")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">N° minute{fleche("numero_minute", tri.champ, tri.sens)}</th><th onClick={() => clicTri("numero_dossier")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">N° dossier{fleche("numero_dossier", tri.champ, tri.sens)}</th><th onClick={() => clicTri("date_ouverture")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Ouverture{fleche("date_ouverture", tri.champ, tri.sens)}</th><th onClick={() => clicTri("date_echeance")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Échéance{fleche("date_echeance", tri.champ, tri.sens)}</th><th onClick={() => clicTri("nature_acte")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Nature{fleche("nature_acte", tri.champ, tri.sens)}</th><th onClick={() => clicTri("parties")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Parties{fleche("parties", tri.champ, tri.sens)}</th>
+              <th onClick={() => clicTri("responsable")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Responsable{fleche("responsable", tri.champ, tri.sens)}</th><th onClick={() => clicTri("conservation_fonciere")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Conservation{fleche("conservation_fonciere", tri.champ, tri.sens)}</th><th onClick={() => clicTri("progression")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Étape / Statut{fleche("progression", tri.champ, tri.sens)}</th><th onClick={() => clicTri("statut_formalites")} style={{ cursor: "pointer", userSelect: "none" }} title="Trier">Formalités{fleche("statut_formalites", tri.champ, tri.sens)}</th><th>Délai (j)</th>
               {voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
             </tr>
           </thead>
@@ -368,7 +372,7 @@ function Actes() {
               <tr><td colSpan={13} style={{ textAlign: "center", color: "#5A6478", padding: 20 }}>
                 Registre vide — enregistrez votre premier acte, ou chargez la démonstration depuis le tableau de bord.</td></tr>
             )}
-            {lignes.filter((a) => {
+            {trier(lignes, tri.champ, tri.sens).filter((a) => {
               if (!recherche.trim()) return true;
               const t = recherche.toLowerCase();
               return [a.numero_minute, a.numero_dossier, a.parties, a.nature_acte, a.conservation_fonciere]

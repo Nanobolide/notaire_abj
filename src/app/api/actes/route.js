@@ -56,6 +56,13 @@ export async function POST(req) {
     if (!voitMontants(s))
       for (const ch of ["emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
         "prestations_annexes","autres_depenses","autres_depenses_motif"]) delete d[ch];
+    if (!d.responsable?.trim()) {
+      const { rows: [n] } = await withTenant(s.etudeId, async (c) =>
+        c.query(
+          `SELECT nom_affiche FROM utilisateurs WHERE etude_id = $1 AND niveau_acces = 'administrateur'
+             AND actif = true ORDER BY cree_le LIMIT 1`, [s.etudeId]));
+      if (n) d.responsable = n.nom_affiche;
+    }
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
     const plafond = plafondReglement(d);

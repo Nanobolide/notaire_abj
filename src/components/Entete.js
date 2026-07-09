@@ -54,9 +54,9 @@ export default function Entete() {
         )}
       </div>
       <nav>
-        {niveau !== "comptable" && lien("/tableau-de-bord", "Tableau de bord")}
-        {niveau !== "comptable" && session?.fonction !== "Accueil" && lien("/actes", "Actes & Minutes")}
-        {niveau !== "comptable" && lien("/appels", "Appels & Courriers")}
+        {lien("/tableau-de-bord", "Tableau de bord")}
+        {session?.fonction !== "Accueil" && lien("/actes", "Actes & Minutes")}
+        {lien("/appels", "Appels & Courriers")}
         {voitFinancier && lien("/comptabilite", "Comptabilité")}
       </nav>
       <div className="zone-param" ref={ref}>
