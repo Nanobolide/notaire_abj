@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
 import { voitRegistreAppels } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
+import { depuisMinutes } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
@@ -49,7 +50,7 @@ export async function POST(req) {
         (await c.query(
           `SELECT 1 FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL
              AND client_nom = $2 AND COALESCE(telephone,'') = COALESCE($3,'')
-             AND cree_le > now() - interval '2 minutes' LIMIT 1`,
+             AND cree_le > ${depuisMinutes(2)} LIMIT 1`,
           [s.etudeId, d.client_nom, d.telephone || null])).rows[0]);
       if (doublon)
         return NextResponse.json({ doublon: true,

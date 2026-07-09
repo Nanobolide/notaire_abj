@@ -112,15 +112,23 @@ export default function TableauDeBord() {
           </div>
 
           {s.finances && (
-          <Bloc titre="Suivi financier (FCFA) — tous dossiers confondus — visible par le Notaire et le Comptable" lien="/actes?vue=registre">
+          <Bloc titre="Suivi financier (FCFA) — tous dossiers confondus — visible par le Notaire et le Comptable" lien="/comptabilite">
             <table className="registre">
               <tbody>
-                <tr><td>Total des honoraires (tous dossiers)</td><td className="montant">{formatFcfa(s.finances?.honoraires_totaux)}</td></tr>
-                <tr><td>Total des honoraires réglés</td><td className="montant">{formatFcfa(s.finances?.honoraires_regles)}</td></tr>
-                <tr><td>Total des honoraires restant à payer</td><td className="montant" style={{ fontWeight: 700 }}>{formatFcfa(s.finances?.reste_a_payer)}</td></tr>
+                <tr><td><strong>Émoluments — revenu réel de l'étude</strong></td><td className="montant" style={{ color: "#2E7D32", fontWeight: 700 }}>{formatFcfa(s.finances?.emoluments)}</td></tr>
+                <tr><td>Total facturé aux clients (ventilé)</td><td className="montant">{formatFcfa(s.finances?.total_facture)}</td></tr>
+                <tr><td>Total encaissé</td><td className="montant">{formatFcfa(s.finances?.honoraires_regles)}</td></tr>
+                <tr><td>Reste à recouvrer</td><td className="montant" style={{ fontWeight: 700, color: "#B03030" }}>{formatFcfa(s.finances?.reste_a_payer)}</td></tr>
                 <tr><td>Total des valeurs des actes</td><td className="montant">{formatFcfa(s.finances?.valeur_totale)}</td></tr>
-                <tr className="zoom"><td>— Zoom : honoraires des seuls dossiers en cours</td><td className="montant">{formatFcfa(s.finances?.zoom_honoraires_en_cours)}</td></tr>
+                <tr className="zoom"><td>— Zoom : facturé sur les seuls dossiers en cours</td><td className="montant">{formatFcfa(s.finances?.zoom_honoraires_en_cours)}</td></tr>
                 <tr className="zoom"><td>— Zoom : valeur des seuls actes en cours</td><td className="montant">{formatFcfa(s.finances?.zoom_valeur_en_cours)}</td></tr>
+                <tr className="zoom"><td>— Frais annoncés par les clercs (prévision, non contractuelle)</td><td className="montant">{formatFcfa(s.finances?.frais_annonces)}</td></tr>
+                {s.finances && Number(s.finances.frais_annonces) !== Number(s.finances.total_facture) && (
+                  <tr><td colSpan={2} style={{ fontSize: 11, color: "#8A6D1F", background: "#FBF6E9" }}>
+                    ⚠️ Écart de {formatFcfa(Math.abs(Number(s.finances.frais_annonces) - Number(s.finances.total_facture)))} entre
+                    la prévision des clercs et la ventilation du comptable. C'est la <strong>ventilation</strong> qui fait foi.
+                  </td></tr>
+                )}
               </tbody>
             </table>
           </Bloc>

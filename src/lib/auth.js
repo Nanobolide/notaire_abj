@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
-import { verifierCompteActif } from "@/lib/db";
+import { etatCompte } from "@/lib/db";
 
 const COOKIE = "notaria_session";
 const DUREE_SESSION = 60 * 30; // 30 min — postes partagés à l'accueil
@@ -79,9 +79,11 @@ export function verifierMfaChallenge(token) {
 export async function exigerSession(permettreMdpProvisoire = false) {
   const s = session();
   if (!s) { const e = new Error("Non authentifié"); e.status = 401; throw e; }
-  // C7 — révocation immédiate : compte désactivé/verrouillé => accès coupé sur-le-champ.
-  const actif = await verifierCompteActif(s.uid);
-  if (!actif) { const e = new Error("Votre accès a été suspendu. Contactez le Notaire de l'étude."); e.status = 403; throw e; }
+  // C7 + C14 — révocation immédiate et rafraîchissement niveau_acces / fonction.
+  const etat = await etatCompte(s.uid);
+  if (!etat) { const e = new Error("Votre accès a été suspendu. Contactez le Notaire de l'étude."); e.status = 403; throw e; }
+  s.niveauAcces = etat.niveauAcces;
+  s.fonction = etat.fonction;
   // C1 — blocage tant que le mot de passe provisoire n'est pas changé.
   if (s.doitChangerMdp && !permettreMdpProvisoire) {
     const e = new Error("Vous devez d'abord changer votre mot de passe (première connexion).");

@@ -163,6 +163,13 @@ tr.zoom td { color: #808080; font-style: italic; font-size: 12px; }
 .pers .p-etat { margin-left: auto; font-size: 11px; }
 .pers .p-etat.vert { color: #2E7D32; font-weight: 600; } .pers .p-etat.gris { color: #8A94A8; }
 
+.icone {
+  background: none; border: 0.5px solid transparent; border-radius: 6px; cursor: pointer;
+  font-size: 15px; padding: 4px 7px; line-height: 1;
+}
+.icone:hover { background: #EEF1F6; border-color: #D5DBE5; }
+.icone.danger:hover { background: #FDF3F3; border-color: #E8C4C4; }
+
 /* --- V3 : console Super-Admin alignée sur la charte main --- */
 .admin-entete {
   background: var(--bleu);

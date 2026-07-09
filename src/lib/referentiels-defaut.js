@@ -12,6 +12,7 @@ export const REFERENTIELS_DEFAUT = [
   ["progression", "Rédaction"], ["progression", "Formalités"], ["progression", "Signature"],
   ["progression", "État Foncier"], ["progression", "Transmission client"], ["progression", "Terminé"], ["progression", "Annulé"],
   ["statut_paiement", "Réglé"], ["statut_paiement", "Partiel"], ["statut_paiement", "En attente"],
+  ["responsable", "Le Notaire"], ["responsable", "Clerc 1"], ["responsable", "Clerc 2"], ["responsable", "Clerc 3"],
   ["conservation_fonciere", "ABENGOUROU"], ["conservation_fonciere", "ABOBO"], ["conservation_fonciere", "ADZOPE"],
   ["conservation_fonciere", "AGBOVILLE"], ["conservation_fonciere", "BINGERVILLE"], ["conservation_fonciere", "BONDOUKOU"],
   ["conservation_fonciere", "BOUAFLE"], ["conservation_fonciere", "BOUAKE"], ["conservation_fonciere", "COCODY"],

@@ -30,6 +30,13 @@ export function actifFalse() {
   return isPg() ? "false" : "0";
 }
 
+/** Fenêtre récente (anti-doublon) : now() - interval en PG, datetime() en SQLite. */
+export function depuisMinutes(minutes) {
+  return isPg()
+    ? `now() - interval '${minutes} minutes'`
+    : `datetime('now', '-${minutes} minutes')`;
+}
+
 export function lockAccountSql() {
   return isPg()
     ? "verrouille_jusqua = now() + interval '100 years'"
@@ -156,11 +163,13 @@ export function dashboardQueries() {
         ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS echeances_depassees,
         ${cnt(`${EN_COURS} AND ${jOuv} > ${barème}`)} AS critiques
       FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
-      finances: `SELECT COALESCE(sum(honoraires_totaux),0) AS honoraires_totaux,
+      finances: `SELECT COALESCE(sum(emoluments + droits_etat + debours + prestations_annexes + autres_depenses),0) AS total_facture,
+        COALESCE(sum(emoluments),0) AS emoluments,
+        COALESCE(sum(honoraires_totaux),0) AS frais_annonces,
         COALESCE(sum(montant_regle),0) AS honoraires_regles,
-        COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
+        COALESCE(sum(emoluments + droits_etat + debours + prestations_annexes + autres_depenses - montant_regle),0) AS reste_a_payer,
         COALESCE(sum(valeur_acte),0) AS valeur_totale,
-        COALESCE(sum(honoraires_totaux) FILTER (WHERE ${EN_COURS}),0) AS zoom_honoraires_en_cours,
+        COALESCE(sum(emoluments + droits_etat + debours + prestations_annexes + autres_depenses) FILTER (WHERE ${EN_COURS}),0) AS zoom_honoraires_en_cours,
         COALESCE(sum(valeur_acte) FILTER (WHERE ${EN_COURS}),0) AS zoom_valeur_en_cours
       FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
       parConservation: `SELECT conservation_fonciere, count(*) AS dossiers,
@@ -207,11 +216,13 @@ export function dashboardQueries() {
       ${cnt(`${EN_COURS} AND date_echeance < ${t}`)} AS echeances_depassees,
       ${cnt(`${EN_COURS} AND ${jOuv} > ${barème}`)} AS critiques
     FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
-    finances: `SELECT COALESCE(sum(honoraires_totaux),0) AS honoraires_totaux,
+    finances: `SELECT COALESCE(sum(emoluments + droits_etat + debours + prestations_annexes + autres_depenses),0) AS total_facture,
+      COALESCE(sum(emoluments),0) AS emoluments,
+      COALESCE(sum(honoraires_totaux),0) AS frais_annonces,
       COALESCE(sum(montant_regle),0) AS honoraires_regles,
-      COALESCE(sum(honoraires_totaux - montant_regle),0) AS reste_a_payer,
+      COALESCE(sum(emoluments + droits_etat + debours + prestations_annexes + autres_depenses - montant_regle),0) AS reste_a_payer,
       COALESCE(sum(valeur_acte),0) AS valeur_totale,
-      ${sumIf(EN_COURS, "honoraires_totaux")} AS zoom_honoraires_en_cours,
+      ${sumIf(EN_COURS, "emoluments + droits_etat + debours + prestations_annexes + autres_depenses")} AS zoom_honoraires_en_cours,
       ${sumIf(EN_COURS, "valeur_acte")} AS zoom_valeur_en_cours
     FROM actes WHERE etude_id = $1 AND supprime_le IS NULL`,
     parConservation: `SELECT conservation_fonciere, count(*) AS dossiers,

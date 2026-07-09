@@ -76,6 +76,17 @@ CREATE TABLE IF NOT EXISTS actes (
   termine_le TEXT,
   valeur_acte INTEGER NOT NULL DEFAULT 0,
   honoraires_totaux INTEGER NOT NULL DEFAULT 0,
+  emoluments INTEGER NOT NULL DEFAULT 0,
+  exonere_tva INTEGER NOT NULL DEFAULT 0,
+  droits_etat INTEGER NOT NULL DEFAULT 0,
+  debours INTEGER NOT NULL DEFAULT 0,
+  debours_rembourses INTEGER NOT NULL DEFAULT 0,
+  prestations_annexes INTEGER NOT NULL DEFAULT 0,
+  autres_depenses INTEGER NOT NULL DEFAULT 0,
+  autres_depenses_motif TEXT,
+  depenses_formalites INTEGER NOT NULL DEFAULT 0,
+  statut_formalites TEXT NOT NULL DEFAULT 'Pas encore débuté'
+    CHECK (statut_formalites IN ('Pas encore débuté','Débuté','En cours','Terminé')),
   montant_regle INTEGER NOT NULL DEFAULT 0,
   statut_paiement TEXT NOT NULL DEFAULT 'En attente',
   difficultes TEXT,
@@ -156,7 +167,17 @@ CREATE TABLE IF NOT EXISTS parametres_etude (
   couleur_n2 TEXT NOT NULL DEFAULT '#FFD9A0',
   couleur_n3 TEXT NOT NULL DEFAULT '#FF9E9E',
   couleur_ok TEXT NOT NULL DEFAULT '#E9F7EC',
+  taux_tva REAL NOT NULL DEFAULT 0.18 CHECK (taux_tva >= 0 AND taux_tva <= 1),
   maj_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS avis (
+  id TEXT PRIMARY KEY,
+  fonction TEXT,
+  categorie TEXT NOT NULL DEFAULT 'Amélioration'
+    CHECK (categorie IN ('Amélioration','Difficulté rencontrée','Erreur / bug','Autre')),
+  message TEXT NOT NULL,
+  recu_le TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS demandes_recuperation (

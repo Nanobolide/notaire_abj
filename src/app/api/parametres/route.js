@@ -11,6 +11,7 @@ const DEFAUTS = {
   succession_s1: 180, succession_s2: 270, succession_s3: 365,
   appel_s1: 3, appel_s2: 5, appel_s3: 10,
   couleur_n1: "#FFF4C2", couleur_n2: "#FFD9A0", couleur_n3: "#FF9E9E", couleur_ok: "#E9F7EC",
+  taux_tva: 0.18,
 };
 
 async function lire(c, etudeId) {

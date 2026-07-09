@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
-import { filtrerActe, voitMontants, voitRegistreActes } from "@/lib/acces";
-import { withTenant, audit } from "@/lib/db";
+import { voitRegistreActes, filtrerActe, voitMontants, saisitPrevision, plafondReglement } from "@/lib/acces";
+import { withTenant, audit, newId } from "@/lib/db";
+import { isPg, depuisMinutes } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
@@ -24,13 +25,17 @@ export async function GET(req) {
     if (p.get("du")) ajouter("date_ouverture >= ?", p.get("du"));
     if (p.get("au")) ajouter("date_ouverture <= ?", p.get("au"));
     const where = filtres.length ? " AND " + filtres.join(" AND ") : "";
+    const partiesSql = isPg()
+      ? `COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
+                  FROM acte_parties p WHERE p.acte_id = a.id AND p.etude_id = a.etude_id), '')`
+      : `COALESCE((SELECT group_concat(p.nom_partie, ' / ')
+                  FROM (SELECT nom_partie FROM acte_parties p
+                        WHERE p.acte_id = a.id AND p.etude_id = a.etude_id ORDER BY p.ordre)), '')`;
     const { rows, total } = await withTenant(s.etudeId, async (c) => {
       const total = Number((await c.query(
         `SELECT count(*) AS count FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}`, valeurs)).rows[0].count);
       const rows = (await c.query(
-        `SELECT a.*,
-                COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-                          FROM acte_parties p WHERE p.acte_id = a.id AND p.etude_id = a.etude_id), '') AS parties
+        `SELECT a.*, ${partiesSql} AS parties
          FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}
          ORDER BY a.date_ouverture DESC, a.cree_le DESC
          LIMIT ${parPage} OFFSET ${(page - 1) * parPage}`, valeurs)).rows;
@@ -46,28 +51,28 @@ export async function POST(req) {
   try {
     const s = await exigerSession(); s2 = s;
     const d = await req.json();
+    if (!saisitPrevision(s))
+      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
     if (!voitMontants(s))
-      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement",
-        "emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
-        "prestations_annexes"]) delete d[ch];
+      for (const ch of ["emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
+        "prestations_annexes","autres_depenses","autres_depenses_motif"]) delete d[ch];
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
-    if (Number(d.montant_regle || 0) > Number(d.honoraires_totaux || 0))
-      return NextResponse.json({ erreur: "Le montant réglé ne peut pas dépasser les honoraires totaux." }, { status: 400 });
+    const plafond = plafondReglement(d);
+    if (plafond > 0 && Number(d.montant_regle || 0) > plafond)
+      return NextResponse.json({ erreur: `Le montant versé (${Number(d.montant_regle).toLocaleString("fr-FR")} F) dépasse le total facturé (${plafond.toLocaleString("fr-FR")} F).` }, { status: 400 });
     if (d.date_echeance && d.date_ouverture && d.date_echeance < d.date_ouverture)
       return NextResponse.json({ erreur: "L'échéance ne peut pas précéder la date d'ouverture." }, { status: 400 });
-    // Alerte anti-doublon : sauf si l'utilisateur a confirmé (forcer=true)
     if (!d.forcer) {
       const doublon = await withTenant(s.etudeId, async (c) =>
         (await c.query(
           `SELECT numero_minute FROM actes WHERE etude_id = $1 AND supprime_le IS NULL
-             AND (numero_minute = $2 OR (nature_acte = $3 AND cree_le > now() - interval '5 minutes'))
+             AND (numero_minute = $2 OR (nature_acte = $3 AND cree_le > ${depuisMinutes(5)}))
            LIMIT 1`, [s.etudeId, d.numero_minute, d.nature_acte || null])).rows[0]);
       if (doublon)
         return NextResponse.json({ doublon: true,
           message: `Un acte similaire existe déjà (${doublon.numero_minute}). Enregistrer quand même ?` }, { status: 409 });
     }
-    // Échéance par défaut selon le barème : succession +180 j, simple +20 j, complexe +30 j
     if (!d.date_echeance) {
       const base = d.date_ouverture ? new Date(d.date_ouverture) : new Date();
       const jours = d.nature_acte === "Succession" ? 180 : d.complexite === "Simple" ? 20 : 30;
@@ -75,23 +80,45 @@ export async function POST(req) {
       d.date_echeance = base.toISOString().slice(0, 10);
     }
     const ligne = await withTenant(s.etudeId, async (c) => {
-      const { rows } = await c.query(
-        `INSERT INTO actes (etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
-           nature_acte, complexite, responsable, conservation_fonciere, progression,
-           valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
-         VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE),
-                 COALESCE($5::date, CURRENT_DATE + 30),          -- échéance (calculée selon le barème en amont)
-                 $6,$7,$8,$9, COALESCE($10,'Rédaction'),
-                 COALESCE($11,0),COALESCE($12,0),COALESCE($13,0),
-                 COALESCE($14,'En attente'), $15, $16, $17)
-         RETURNING *`,
-        [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
-         d.date_echeance || null, d.nature_acte || null, d.complexite || null,
-         d.responsable || null, d.conservation_fonciere || null, d.progression,
-         d.valeur_acte, d.honoraires_totaux, d.montant_regle, d.statut_paiement,
-         d.difficultes || null, d.observations || null, s.uid]);
+      const baseParams = [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
+        d.date_echeance || null, d.nature_acte || null, d.complexite || null,
+        d.responsable || null, d.conservation_fonciere || null, d.progression,
+        d.valeur_acte, d.honoraires_totaux, d.montant_regle, d.statut_paiement,
+        d.emoluments, d.exonere_tva, d.droits_etat, d.debours, d.debours_rembourses,
+        d.prestations_annexes, d.autres_depenses, d.autres_depenses_motif || null,
+        d.difficultes || null, d.observations || null, s.uid];
+      let rows;
+      if (isPg()) {
+        ({ rows } = await c.query(
+          `INSERT INTO actes (etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
+             nature_acte, complexite, responsable, conservation_fonciere, progression,
+             valeur_acte, honoraires_totaux, montant_regle, statut_paiement,
+             emoluments, exonere_tva, droits_etat, debours, debours_rembourses,
+             prestations_annexes, autres_depenses, autres_depenses_motif,
+             difficultes, observations, saisi_par)
+           VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE), COALESCE($5::date, CURRENT_DATE + 30),
+                   $6,$7,$8,$9, COALESCE($10,'Rédaction'),
+                   COALESCE($11,0),COALESCE($12,0),COALESCE($13,0), COALESCE($14,'En attente'),
+                   COALESCE($15,0),COALESCE($16,false),COALESCE($17,0),COALESCE($18,0),COALESCE($19,false),
+                   COALESCE($20,0),COALESCE($21,0),$22, $23, $24, $25)
+           RETURNING *`, baseParams));
+      } else {
+        const id = newId();
+        ({ rows } = await c.query(
+          `INSERT INTO actes (id, etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
+             nature_acte, complexite, responsable, conservation_fonciere, progression,
+             valeur_acte, honoraires_totaux, montant_regle, statut_paiement,
+             emoluments, exonere_tva, droits_etat, debours, debours_rembourses,
+             prestations_annexes, autres_depenses, autres_depenses_motif,
+             difficultes, observations, saisi_par)
+           VALUES ($1,$2,$3,$4,
+                   COALESCE($5, date('now')), COALESCE($6, date('now', '+30 days')),
+                   $7,$8,$9,$10,$11, COALESCE($12,0),COALESCE($13,0),COALESCE($14,0), COALESCE($15,'En attente'),
+                   COALESCE($16,0),COALESCE($17,0),COALESCE($18,0),COALESCE($19,0),COALESCE($20,0),
+                   COALESCE($21,0),COALESCE($22,0),$23, $24, $25, $26)
+           RETURNING *`, [id, ...baseParams]));
+      }
       const acte = rows[0];
-      // Parties multiples (Partie 1, 2, 3...)
       const parties = Array.isArray(d.parties) ? d.parties.filter(Boolean) : [];
       for (let i = 0; i < parties.length; i++) {
         await c.query(

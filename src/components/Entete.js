@@ -18,7 +18,6 @@ export default function Entete() {
     }).catch(() => {});
   }, [routeur]);
 
-  // Fermer le menu au clic extérieur
   useEffect(() => {
     const clic = (e) => { if (ref.current && !ref.current.contains(e.target)) setMenuOuvert(false); };
     document.addEventListener("mousedown", clic);
@@ -32,7 +31,9 @@ export default function Entete() {
   const lien = (href, texte) => (
     <Link href={href} className={chemin === href ? "actif" : ""}>{texte}</Link>
   );
-  const admin = session && (session.role === "admin_etude" || session.role === "super_admin");
+  const niveau = session?.niveauAcces || (session?.role === "admin_etude" ? "administrateur" : "standard");
+  const admin = niveau === "administrateur" || session?.role === "super_admin";
+  const voitFinancier = ["administrateur", "notaire_salarie", "comptable"].includes(niveau);
   const roleLisible = { admin_etude: "Notaire", super_admin: "Super-Admin", collaborateur: session?.fonction || "Collaborateur" }[session?.role] || "";
 
   const item = (href, ic, titre, desc) => (
@@ -53,9 +54,10 @@ export default function Entete() {
         )}
       </div>
       <nav>
-        {lien("/tableau-de-bord", "Tableau de bord")}
-        {lien("/appels", "Appels & Courriers")}
-        {lien("/actes", "Actes & Minutes")}
+        {niveau !== "comptable" && lien("/tableau-de-bord", "Tableau de bord")}
+        {niveau !== "comptable" && session?.fonction !== "Accueil" && lien("/actes", "Actes & Minutes")}
+        {niveau !== "comptable" && lien("/appels", "Appels & Courriers")}
+        {voitFinancier && lien("/comptabilite", "Comptabilité")}
       </nav>
       <div className="zone-param" ref={ref}>
         <button className="param-btn" onClick={() => setMenuOuvert(!menuOuvert)}>⚙ Paramètres ▾</button>
@@ -69,6 +71,7 @@ export default function Entete() {
               {item("/parametres", "⏱️", "Délais & barèmes", "Couleurs d'alerte par type")}
             </>}
             {item("/changer-mot-de-passe", "🔑", "Changer mon mot de passe", null)}
+            {item("/avis", "💬", "Votre avis sur l'application", "Anonyme")}
             {item("/mentions-legales", "⚖️", "Mentions légales", null)}
             <button className="menu-item deco" onClick={deconnexion}>
               <span className="ic">⏻</span><span className="t">Se déconnecter</span>

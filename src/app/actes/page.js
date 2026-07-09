@@ -9,6 +9,8 @@ import { couleurActe, joursEcoules, respectEcheance, resteAPayer, formatFcfa } f
 const VIDE = { numero_minute: "", numero_dossier: "", nature_acte: "", complexite: "Simple",
   responsable: "", conservation_fonciere: "", progression: "Rédaction",
   valeur_acte: "", honoraires_totaux: "", montant_regle: "", statut_paiement: "En attente",
+  emoluments: "", droits_etat: "", debours: "", prestations_annexes: "",
+  autres_depenses: "", autres_depenses_motif: "", debours_rembourses: false,
   parties: ["", ""], difficultes: "", observations: "" };
 
 // Complexité pré-sélectionnée selon la nature (modifiable, sauf Succession : toujours Complexe)
@@ -34,6 +36,8 @@ function Actes() {
   const [erreur, setErreur] = useState("");
   const [admin, setAdmin] = useState(false);
   const [voitArgent, setVoitArgent] = useState(false);
+  const [peutFormalites, setPeutFormalites] = useState(false);
+  const [peutPrevision, setPeutPrevision] = useState(false);
   const [param, setParam] = useState(null);
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
@@ -55,6 +59,9 @@ function Actes() {
       const n = d.niveauAcces || (d.role === "admin_etude" ? "administrateur" : "standard");
       setAdmin(n === "administrateur" || d.role === "super_admin");
       setVoitArgent(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.role === "super_admin");
+      setPeutFormalites(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.fonction === "Formaliste");
+      const REDACTEURS = ["Notaire principal","Notaire salarié","Clerc de 1ère catégorie","Clerc 2","Clerc 3","Clerc 4","Clerc 5"];
+      setPeutPrevision(["administrateur","notaire_salarie","comptable"].includes(n) || REDACTEURS.includes(d.fonction));
     }); }, []);
   useEffect(() => { charger(); }, [charger]);
 
@@ -116,6 +123,14 @@ function Actes() {
   const changerProgression = async (id, progression) => {
     await fetch(`/api/actes/${id}`, { method: "PATCH",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ progression }) });
+    charger();
+  };
+
+  /** Le Formaliste (ou le Notaire/Comptable) met à jour l'état des formalités depuis le tableau. */
+  const changerFormalites = async (id, statut_formalites) => {
+    const rep = await fetch(`/api/actes/${id}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statut_formalites }) });
+    if (!rep.ok) { const d = await rep.json(); setErreur(d.erreur || "Modification refusée."); return; }
     charger();
   };
 
@@ -204,12 +219,51 @@ function Actes() {
             <div style={{ alignSelf: "end" }}>
               <button type="button" className="bouton secondaire" onClick={ajouterPartie}>+ Ajouter une partie</button>
             </div>
-            {voitArgent && (<>
+            {peutPrevision && (<>
             <label>Valeur de l'acte (FCFA)<input type="number" min="0" value={form.valeur_acte} onChange={maj("valeur_acte")} /></label>
-            <label>Honoraires totaux (FCFA)<input type="number" min="0" value={form.honoraires_totaux} onChange={maj("honoraires_totaux")} /></label>
-            <label>Montant réglé (FCFA)<input type="number" min="0" value={form.montant_regle} onChange={maj("montant_regle")} /></label>
+            <label>Frais annoncés au client (FCFA)<input type="number" min="0" value={form.honoraires_totaux} onChange={maj("honoraires_totaux")} /></label>
+            <label>Montant versé par le client (FCFA)<input type="number" min="0" value={form.montant_regle} onChange={maj("montant_regle")} /></label>
             <label>Statut paiement {sel("statut_paiement", form.statut_paiement, maj("statut_paiement"))}</label>
             </>)}
+
+            {voitArgent && (
+            <div style={{ gridColumn: "1 / -1", border: "0.5px solid #E4D3A0", background: "#FBF9F2",
+                          borderRadius: 8, padding: "12px 14px", marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#8A6D1F", marginBottom: 3 }}>
+                Ventilation comptable</div>
+              <p style={{ fontSize: 11, color: "#7A6A45", marginBottom: 10, lineHeight: 1.45 }}>
+                Réservée au Notaire et au Comptable. Total facturé au client ={" "}
+                <strong>émoluments + droits d'État + débours + autres dépenses</strong>.
+                Seuls les <strong>émoluments</strong> sont un revenu de l'étude.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))", gap: 10 }}>
+                <label>Émoluments (FCFA)
+                  <input type="number" min="0" value={form.emoluments} onChange={maj("emoluments")} /></label>
+                <label>Droits d'État (FCFA)
+                  <input type="number" min="0" value={form.droits_etat} onChange={maj("droits_etat")} /></label>
+                <label>Débours (FCFA)
+                  <input type="number" min="0" value={form.debours} onChange={maj("debours")} /></label>
+                <label>Prestations annexes (FCFA)
+                  <input type="number" min="0" value={form.prestations_annexes} onChange={maj("prestations_annexes")} /></label>
+                <label>Autres dépenses (FCFA)
+                  <input type="number" min="0" value={form.autres_depenses} onChange={maj("autres_depenses")} /></label>
+                <label>Motif des autres dépenses
+                  <input value={form.autres_depenses_motif} onChange={maj("autres_depenses_motif")}
+                         placeholder="ex. redressement" /></label>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, fontSize: 12 }}>
+                <input type="checkbox" checked={!!form.debours_rembourses}
+                       onChange={(e) => setForm({ ...form, debours_rembourses: e.target.checked })}
+                       style={{ width: "auto" }} />
+                Débours remboursés par le client
+              </label>
+              <p style={{ fontSize: 12, color: "#1F3864", marginTop: 10, fontWeight: 600 }}>
+                Total facturé : {(Number(form.emoluments || 0) + Number(form.droits_etat || 0) +
+                  Number(form.debours || 0) + Number(form.prestations_annexes || 0) +
+                  Number(form.autres_depenses || 0)).toLocaleString("fr-FR")} FCFA
+              </p>
+            </div>
+            )}
             <label style={{ gridColumn: "1 / -1" }}>Difficultés rencontrées
               <textarea value={form.difficultes} onChange={maj("difficultes")} /></label>
             <label style={{ gridColumn: "1 / -1" }}>Observations
@@ -304,9 +358,9 @@ function Actes() {
         <table className="registre">
           <thead>
             <tr>
-              <th>N° minute</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
-              <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Délai (j)</th>
-              <th>Échéance ?</th>{voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
+              <th>N° minute</th><th>N° dossier</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
+              <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Formalités</th><th>Délai (j)</th>
+              {voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -324,7 +378,7 @@ function Actes() {
               const fini = a.progression === "Terminé" || a.progression === "Annulé";
               return (
                 <tr key={a.id} style={{ background: c.fond }}>
-                  <td>{a.numero_minute}</td>
+                  <td>{a.numero_minute}</td><td>{a.numero_dossier || "—"}</td>
                   <td>{new Date(a.date_ouverture).toLocaleDateString("fr-FR")}</td>
                   <td>{new Date(a.date_echeance).toLocaleDateString("fr-FR")}</td>
                   <td>{a.nature_acte || "—"}</td>
@@ -336,8 +390,17 @@ function Actes() {
                       {(refs.progression || []).map((v) => <option key={v}>{v}</option>)}
                     </select>
                   </td>
+                  <td>
+                    {peutFormalites ? (
+                      <select value={a.statut_formalites || "Pas encore débuté"}
+                              onChange={(e) => changerFormalites(a.id, e.target.value)}
+                              style={{ fontSize: 11.5, maxWidth: 155 }}>
+                        {["Pas encore débuté", "Débuté", "En cours", "Terminé"].map((v) =>
+                          <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    ) : (a.statut_formalites || "—")}
+                  </td>
                   <td>{fini ? a.progression : joursEcoules(a.date_ouverture, a.termine_le)}</td>
-                  <td>{respectEcheance(a)}</td>
                   {voitArgent && (<>
                   <td>{formatFcfa(a.honoraires_totaux)}</td>
                   <td style={{ fontWeight: 600 }}>{formatFcfa(resteAPayer(a))}</td>
