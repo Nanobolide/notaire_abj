@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exigerSession, exigerAdmin } from "@/lib/auth";
 import { modifieTva, gereParametres } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
+import { now } from "@/lib/dialect";
 
 const DEFAUTS = {
   conservation_annees: 10, session_minutes: 30,
@@ -70,7 +71,7 @@ export async function PATCH(req) {
       await lire(c, s.etudeId); // garantit l'existence de la ligne
       if (champs.length) {
         const sets = champs.map((k, i) => `${k} = $${i + 2}`).join(", ");
-        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = now() WHERE etude_id = $1`,
+        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = ${now()} WHERE etude_id = $1`,
           [s.etudeId, ...champs.map((k) => source[k])]);
       }
       await audit(c, { etudeId: s.etudeId, table: "parametres_etude", action: "modification",

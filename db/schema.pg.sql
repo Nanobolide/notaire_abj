@@ -1,4 +1,5 @@
 -- NOTARIA — Schéma PostgreSQL (production Render)
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS etudes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,8 +24,16 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   actif BOOLEAN NOT NULL DEFAULT true,
   echecs_connexion INT NOT NULL DEFAULT 0,
   verrouille_jusqua TIMESTAMPTZ,
+  derniere_activite TIMESTAMPTZ,
+  nom_complet VARCHAR,
+  niveau_acces VARCHAR NOT NULL DEFAULT 'standard'
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard')),
+  mfa_active BOOLEAN NOT NULL DEFAULT false,
+  mfa_method VARCHAR(20) NOT NULL DEFAULT 'totp',
+  mfa_secret TEXT,
+  mfa_backup_codes TEXT,
   cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (etude_id, identifiant)
+  UNIQUE (identifiant)
 );
 
 CREATE TABLE IF NOT EXISTS appels_courriers (
@@ -107,6 +116,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   utilisateur UUID,
   horodatage TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_audit_etude_horodatage ON audit_log(etude_id, horodatage DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_table_ligne ON audit_log(table_cible, ligne_id);
 
 CREATE TABLE IF NOT EXISTS exports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -153,6 +164,130 @@ CREATE TABLE IF NOT EXISTS demandes_recuperation (
   statut VARCHAR NOT NULL DEFAULT 'en_attente'
 );
 
+CREATE TABLE IF NOT EXISTS security_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  etude_id UUID,
+  utilisateur UUID,
+  type_evenement VARCHAR(80) NOT NULL,
+  severite VARCHAR(20) NOT NULL DEFAULT 'info',
+  details JSONB,
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_etude ON security_events(etude_id, cree_le DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(type_evenement, cree_le DESC);
+
+CREATE TABLE IF NOT EXISTS saas_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR(40) NOT NULL UNIQUE,
+  nom VARCHAR(120) NOT NULL,
+  prix_mensuel BIGINT NOT NULL DEFAULT 0,
+  prix_annuel BIGINT NOT NULL DEFAULT 0,
+  max_utilisateurs INT NOT NULL DEFAULT 10,
+  max_stockage_go INT NOT NULL DEFAULT 10,
+  actif BOOLEAN NOT NULL DEFAULT true,
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS saas_tenants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  etude_id UUID UNIQUE REFERENCES etudes(id) ON DELETE CASCADE,
+  nom_tenant VARCHAR(160) NOT NULL,
+  contact_nom VARCHAR(160),
+  contact_email VARCHAR(255),
+  statut VARCHAR(20) NOT NULL DEFAULT 'actif' CHECK (statut IN ('actif','suspendu','resilie')),
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS saas_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  plan_id UUID NOT NULL REFERENCES saas_plans(id),
+  date_debut DATE NOT NULL DEFAULT CURRENT_DATE,
+  date_fin DATE,
+  periodicite VARCHAR(20) NOT NULL DEFAULT 'mensuel' CHECK (periodicite IN ('mensuel','annuel')),
+  statut VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (statut IN ('active','en_retard','annulee')),
+  montant BIGINT NOT NULL DEFAULT 0,
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant ON saas_subscriptions(tenant_id, statut);
+
+CREATE TABLE IF NOT EXISTS saas_licenses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  cle_licence VARCHAR(120) NOT NULL UNIQUE,
+  quota_utilisateurs INT NOT NULL DEFAULT 10,
+  quota_stockage_go INT NOT NULL DEFAULT 10,
+  expire_le DATE,
+  statut VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (statut IN ('active','expiree','revoquee')),
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS saas_invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  subscription_id UUID REFERENCES saas_subscriptions(id) ON DELETE SET NULL,
+  reference VARCHAR(60) NOT NULL UNIQUE,
+  montant BIGINT NOT NULL DEFAULT 0,
+  devise VARCHAR(10) NOT NULL DEFAULT 'XOF',
+  statut VARCHAR(20) NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente','payee','annulee')),
+  emission_le DATE NOT NULL DEFAULT CURRENT_DATE,
+  echeance_le DATE,
+  payee_le DATE,
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS saas_support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES saas_tenants(id) ON DELETE SET NULL,
+  sujet VARCHAR(160) NOT NULL,
+  description TEXT NOT NULL,
+  priorite VARCHAR(20) NOT NULL DEFAULT 'normale' CHECK (priorite IN ('basse','normale','haute','critique')),
+  statut VARCHAR(20) NOT NULL DEFAULT 'ouvert' CHECK (statut IN ('ouvert','en_cours','resolu','ferme')),
+  cree_par UUID REFERENCES utilisateurs(id),
+  assigne_a UUID REFERENCES utilisateurs(id),
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS saas_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  canal VARCHAR(20) NOT NULL DEFAULT 'in_app' CHECK (canal IN ('in_app','email','sms')),
+  cible VARCHAR(255),
+  sujet VARCHAR(160),
+  message TEXT NOT NULL,
+  statut VARCHAR(20) NOT NULL DEFAULT 'queued' CHECK (statut IN ('queued','sent','failed')),
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  envoye_le TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS saas_global_settings (
+  cle VARCHAR(80) PRIMARY KEY,
+  valeur JSONB NOT NULL,
+  modifie_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  modifie_par UUID REFERENCES utilisateurs(id)
+);
+
+CREATE OR REPLACE FUNCTION refuser_modification_audit()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_log est immuable';
+END $$;
+
+DROP TRIGGER IF EXISTS trg_audit_log_no_update ON audit_log;
+CREATE TRIGGER trg_audit_log_no_update
+BEFORE UPDATE ON audit_log
+FOR EACH ROW EXECUTE FUNCTION refuser_modification_audit();
+
+DROP TRIGGER IF EXISTS trg_audit_log_no_delete ON audit_log;
+CREATE TRIGGER trg_audit_log_no_delete
+BEFORE DELETE ON audit_log
+FOR EACH ROW EXECUTE FUNCTION refuser_modification_audit();
+
 CREATE OR REPLACE FUNCTION prochain_numero_appel(p_etude UUID) RETURNS INT AS $$
   SELECT COALESCE(MAX(numero), 0) + 1 FROM appels_courriers
   WHERE etude_id = p_etude AND annee = EXTRACT(YEAR FROM now());
@@ -189,7 +324,7 @@ CREATE OR REPLACE FUNCTION compte_est_actif(p_uid UUID)
 RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (
     SELECT 1 FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
-    WHERE u.id = p_uid AND u.actif = true AND e.statut = 'active'
+    WHERE u.id = p_uid AND u.actif = true AND (u.role = 'super_admin' OR e.statut = 'active')
       AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now()));
 $$;
 

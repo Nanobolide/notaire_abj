@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { exigerAdmin } from "@/lib/auth";
-import { NIVEAUX, FONCTIONS } from "@/lib/acces";
+import { FONCTIONS, NIVEAUX } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
 import { now } from "@/lib/dialect";
 
@@ -32,15 +32,14 @@ export async function POST(req) {
       return NextResponse.json({ erreur: "Fonction inconnue." }, { status: 400 });
     if (motDePasseProvisoire.length < 8)
       return NextResponse.json({ erreur: "Mot de passe provisoire : au moins 8 caractères." }, { status: 400 });
+    const role = niveau_acces === "administrateur" || niveau_acces === "notaire_salarie" ? "admin_etude" : "collaborateur";
     const hash = await bcrypt.hash(motDePasseProvisoire, 10);
     const ligne = await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(
         `INSERT INTO utilisateurs (etude_id, role, identifiant, nom_affiche, nom_complet, fonction, niveau_acces, hash_mot_de_passe, doit_changer_mdp)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)
          RETURNING id, identifiant, nom_affiche, nom_complet, fonction, niveau_acces, role, actif`,
-        [s.etudeId,
-         niveau_acces === "administrateur" || niveau_acces === "notaire_salarie" ? "admin_etude" : "collaborateur",
-         identifiant.trim(), nom_affiche.trim(), nom_complet?.trim() || null,
+        [s.etudeId, role, identifiant.trim(), nom_affiche.trim(), nom_complet?.trim() || null,
          fonction || null, niveau_acces || "standard", hash]);
       await audit(c, { etudeId: s.etudeId, table: "utilisateurs", ligneId: rows[0].id,
         action: "creation", apres: { identifiant, nom_affiche, fonction }, utilisateur: s.uid });

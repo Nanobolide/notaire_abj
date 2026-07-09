@@ -11,8 +11,9 @@ export async function POST() {
     const s = await exigerAdmin();
     const resultat = await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(
-        `SELECT (SELECT count(*) FROM actes WHERE supprime_le IS NULL)
-              + (SELECT count(*) FROM appels_courriers WHERE supprime_le IS NULL) AS total`);
+        `SELECT (SELECT count(*) FROM actes WHERE etude_id = $1 AND supprime_le IS NULL)
+              + (SELECT count(*) FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL) AS total`,
+        [s.etudeId]);
       if (Number(rows[0].total) > 0) {
         const e = new Error("Les registres ne sont pas vides : chargement refusé pour ne rien écraser.");
         e.status = 409; throw e;
@@ -20,7 +21,7 @@ export async function POST() {
       const uid = async (nom) => {
         const m = { "Secrétariat": "secretariat", "Accueil": "accueil", "Clerc 1": "clerc1", "Le Notaire": "notaire" };
         if (!m[nom]) return null;
-        const r = await c.query(`SELECT id FROM utilisateurs WHERE identifiant = $1`, [m[nom]]);
+        const r = await c.query(`SELECT id FROM utilisateurs WHERE identifiant = $1 AND etude_id = $2`, [m[nom], s.etudeId]);
         return r.rows[0]?.id || null;
       };
       for (const a of DEMO_ACTES) {

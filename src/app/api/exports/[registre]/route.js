@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { exigerSession } from "@/lib/auth";
+import { exigerSession, exigerStepUp } from "@/lib/auth";
 import { voitRegistreActes, voitRegistreAppels, voitMontants } from "@/lib/acces";
 import { withTenant } from "@/lib/db";
+import { sqlPartiesSubquery } from "@/lib/dialect";
 import { couleurActe, couleurAppel, joursEcoules, respectEcheance } from "@/lib/regles";
 
 const BLEU = "FF1F3864";
@@ -12,6 +13,7 @@ const fond = (hex) => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF
 export async function GET(req, { params }) {
   try {
     const s = await exigerSession();
+    await exigerStepUp();
     const registre = params.registre;
     const url = new URL(req.url);
     const du = url.searchParams.get("du");
@@ -31,14 +33,13 @@ export async function GET(req, { params }) {
 
     await withTenant(s.etudeId, async (c) => {
       if (registre === "actes") {
-        const cond = []; const vals = [];
+        const vals = [s.etudeId]; const cond = [];
         if (du) { vals.push(du); cond.push(`a.date_ouverture >= $${vals.length}`); }
         if (au) { vals.push(au); cond.push(`a.date_ouverture <= $${vals.length}`); }
         const wh = cond.length ? " AND " + cond.join(" AND ") : "";
         const { rows } = await c.query(
-          `SELECT a.*, COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-             FROM acte_parties p WHERE p.acte_id = a.id), '') AS parties
-           FROM actes a WHERE a.supprime_le IS NULL ${wh} ORDER BY a.date_ouverture DESC`, vals);
+          `SELECT a.*, ${sqlPartiesSubquery("a")} AS parties
+           FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${wh} ORDER BY a.date_ouverture DESC`, vals);
         const cols = [
           ["N° minute", "numero_minute", 12], ["N° dossier", "numero_dossier", 12],
           ["Ouverture", "date_ouverture", 12], ["Échéance", "date_echeance", 12],
@@ -72,14 +73,14 @@ export async function GET(req, { params }) {
           ligne.font = { size: 9 };
         }
       } else {
-        const cond = []; const vals = [];
+        const vals = [s.etudeId]; const cond = [];
         if (du) { vals.push(du); cond.push(`a.date_entree >= $${vals.length}`); }
         if (au) { vals.push(au); cond.push(`a.date_entree <= $${vals.length}`); }
         const wh = cond.length ? " AND " + cond.join(" AND ") : "";
         const { rows } = await c.query(
           `SELECT a.*, u.nom_affiche AS saisi_par_nom FROM appels_courriers a
            LEFT JOIN utilisateurs u ON u.id = a.saisi_par
-           WHERE a.supprime_le IS NULL ${wh} ORDER BY a.annee DESC, a.numero DESC`, vals);
+           WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${wh} ORDER BY a.annee DESC, a.numero DESC`, vals);
         const cols = [["N°", 9], ["Type de flux", 18], ["Date", 11], ["Heure", 8], ["Réf. dossier", 12],
           ["Client", 22], ["Contact", 18], ["Destinataire", 13], ["Motif", 20], ["Statut", 16],
           ["Tentatives", 10], ["Jours", 8], ["Observations", 30], ["Saisi par", 14]];

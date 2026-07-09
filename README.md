@@ -1,68 +1,4 @@
-# NOTARIA — Plateforme SaaS multi-études de gestion notariale (socle V2.4)
-
-**V2.4 — les quatre brèches du 3e audit sont fermées** :
-• **C11 (fuite par les exports — la plus grave)** : /api/exports/actes n'exigeait qu'une session.
-  L'Accueil, bloqué sur le registre, pouvait TÉLÉCHARGER tout le registre des actes en Excel
-  (parties, natures, conservations). Le droit d'exporter suit désormais EXACTEMENT le droit de
-  consulter : voitRegistreActes / voitRegistreAppels appliqués à l'export. Accueil → 403 sur
-  l'export des actes ; Comptable → 403 sur l'export des appels.
-• **C12 (Comptable aveugle)** : /api/dashboard et /api/exports testaient estAdmin() (fondé sur
-  `role`). Le Comptable, de role 'collaborateur', ne voyait AUCUN montant — la fonctionnalité ne
-  marchait pas pour la seule personne à qui elle était destinée. Ils utilisent maintenant
-  voitMontants() / voitFinancier(). Le bloc Actes du tableau de bord lui reste fermé.
-• **C13 (TVA verrouillée à tort)** : la matrice donnait modifieTva() au Notaire et au Comptable,
-  mais la route /api/parametres exigeait exigerAdmin(). PATCH distingue désormais le taux de TVA
-  seul (Notaire + Notaire salarié + Comptable) du reste des paramètres (Administrateur seul).
-  Taux borné entre 0 et 1 par contrainte moteur.
-• **I9 (trois sources de vérité)** : estAdmin() est SUPPRIMÉ de src/lib/auth.js. Plus aucun
-  contrôle d'accès ne se fonde sur `role` (vérifié : 0 occurrence). src/lib/acces.js, qui lit
-  `niveau_acces`, est l'unique autorité. C'est ce qui avait causé C9.
-• Bug latent attrapé : un bloc `estAdmin(s)` survivait dans POST /api/actes sans être importé —
-  la création d'acte aurait planté à l'exécution (le build ne le voyait pas). Supprimé.
-• Le tableau de bord tolère les blocs absents (actes/appels/finances à null selon le profil).
-
-Tests : 6 profils × C11, C12, C13 → conformes. Non-régression : isolation, C4, C7, contrainte TVA ✅.
-
-**V2.3 étape 2 — C9 et C10 CORRIGÉES** :
-• **C9 (élévation de privilège)** : `exigerAdmin()` se fondait sur `role` ; le Notaire salarié,
-  ayant `role='admin_etude'`, accédait à /comptes, /parametres et /demo. L'autorisation repose
-  désormais sur `niveau_acces`. Deux gardes distincts : `exigerAdmin()` (Administrateur SEUL —
-  comptes, paramètres, démo) et `exigerNotaire()` (Administrateur + Notaire salarié — suppression
-  d'actes/appels, corbeille). Un Notaire salarié ne peut plus se promouvoir administrateur.
-• **C10 (matrice non appliquée)** : `src/lib/acces.js` est maintenant branchée sur les routes.
-  L'Accueil reçoit 403 sur /api/actes ; le Comptable reçoit 403 sur /api/appels ; `filtrerActe`
-  retire tous les champs financiers (anciens ET nouveaux : emoluments, droits_etat, debours,
-  prestations_annexes) pour quiconque n'est ni Notaire ni Comptable, sur GET, POST et PATCH.
-  L'ancien `filtrerActe` local (qui entrait en collision) a été supprimé.
-• Champs `depenses_formalites` et `statut_formalites` modifiables par le Formaliste, le Notaire
-  et le Comptable uniquement.
-• **Tableau des actes** : colonne « N° dossier » ajoutée après « N° minute » (elle était saisie
-  et stockée, mais invisible — les dossiers en cours n'ont pas encore de n° de minute).
-  Colonne « Échéance ? » (statut) supprimée ; la date d'échéance est conservée.
-  Les colonnes financières suivent la matrice (Notaire + Comptable), plus seulement l'admin.
-
-Test de la matrice : 6 profils vérifiés (Administrateur, Notaire salarié, Comptable, Formaliste,
-Clerc, Accueil) sur 8 permissions + filtrerActe. Non-régression : isolation, C4, C7 ✅.
-
-**V2.3 étape 1 — SOCLE DES ACCÈS ET DE LA COMPTABILITÉ (livrée)** :
-• Mot de passe : minimum ramené à 8 caractères (serveur + libellés).
-• Comptes : nouveaux champs `nom_complet` (état civil) distinct de `nom_affiche` ; `fonction`
-  parmi 12 valeurs (Notaire principal, Notaire salarié, Clerc de 1ère catégorie, Clerc 2-5,
-  Formaliste, Comptable, Archiviste, Secrétariat, Accueil) ; `niveau_acces` indépendant
-  (administrateur / notaire_salarie / comptable / standard), validé serveur ET par contrainte moteur.
-• Nouvelle action `modifier` (nom, nom complet, fonction, niveau) et `DELETE` d'un compte,
-  réservé à l'Administrateur — un Notaire salarié ne peut ni supprimer un compte ni se promouvoir.
-• `src/lib/acces.js` : matrice d'accès centralisée (voitMontants, voitRegistreActes,
-  voitTableauActes, saisitDepenses, modifieTva, filtrerActe…). Un seul endroit décide de qui voit quoi.
-• Base : colonnes comptables sur `actes` (emoluments, exonere_tva, droits_etat, debours,
-  debours_rembourses, prestations_annexes, depenses_formalites, statut_formalites avec CHECK)
-  et `taux_tva` (défaut 0.18) sur `parametres_etude`.
-• Seed enrichi : 7 comptes de démonstration couvrant tous les niveaux d'accès.
-
-**RESTE À FAIRE (étapes 2 et 3)** : écran Comptes refondu (bouton Générer/Copier, bouton œil,
-modification en ligne), suppression de la colonne « Échéance ? », responsables dynamiques,
-application de la matrice sur toutes les routes, tableau de bord financier (A/B/C), écran Comptable,
-génération et import du modèle Excel.
+# NOTARIA — Plateforme SaaS multi-études de gestion notariale (socle V2.2)
 
 **V2.2 — ergonomie & présence** : menu du haut ÉPURÉ (Tableau de bord · Appels · Actes),
 tout le reste regroupé dans un bouton « ⚙ Paramètres » à droite (Comptes, Corbeille, Délais &
@@ -164,32 +100,57 @@ Les registres démarrent **vides** : aucune donnée des fichiers Excel n'est mig
 | Connexion Google OAuth du Notaire | ⬜ À brancher (NextAuth) — la connexion par identifiant fonctionne en attendant |
 | Exports Excel/PDF, écran corbeille, gestion des comptes par le Notaire, purge décennale | ⬜ Étape suivante |
 
-## Installation (10 minutes)
+## Déploiement Render (PostgreSQL — test à distance)
 
-1. **Prérequis** : Node.js 18+, PostgreSQL 14+ (local, Supabase ou Neon).
+Configuré via `render.yaml` (plan free) :
+
+| Variable | Source |
+|---|---|
+| `DATABASE_URL` | PostgreSQL Render (lié automatiquement) |
+| `JWT_SECRET` | Généré par Render |
+| `NODE_ENV` | `production` |
+
+**Flux** : push sur `main` → build (`npm run build`) → démarrage (`npm start`) → migration PG (`prestart`).
+
+- Sonde santé : `GET /api/health`
+- URL : https://notaire-abj.onrender.com
+- Connexion test : `notaire` / `ChangezMoi2026!` (comptes seed)
+
+> Le premier chargement peut prendre 30–60 s (service free en veille).
+
+## Installation locale (SQLite — 5 minutes)
+
+1. **Prérequis** : Node.js 18+ (22 recommandé).
 2. Copier la configuration :
    ```bash
    cp .env.example .env
-   # renseigner DATABASE_URL et un JWT_SECRET aléatoire (openssl rand -hex 32)
+   # Ne pas définir DATABASE_URL → SQLite automatique
    ```
-3. Créer la base :
+3. Créer la base et lancer :
    ```bash
    npm install
-   npm run db:init
+   npm run dev          # migre + http://localhost:3000
    ```
-   **Données de démonstration — EN UN CLIC** : connectez-vous en tant que `notaire`,
-   et sur le tableau de bord (registres vides) cliquez « Charger les données de
-   démonstration » : 30 actes + 30 appels (avril-juin 2026) identiques au classeur Excel.
-   Un bouton « Effacer les données de démonstration » fait l'inverse — il refuse d'agir
-   si les données présentes ne sont pas celles de la démo (protection des vraies données).
-   Alternative en ligne de commande : `db/demo.sql` et `db/demo_reset.sql`.
-4. Lancer :
-   ```bash
-   npm run dev          # http://localhost:3000
-   ```
-5. Se connecter avec un compte de démonstration :
-   - `notaire` / `ChangezMoi2026!` (Administrateur d'étude)
-   - `secretariat`, `clerc1`, `accueil` / même mot de passe (collaborateurs)
+## Données de démonstration (présentation client / PO)
+
+À chaque migration:
+- si le marqueur `2026/0201` est absent, **30 actes** et **30 appels** fictifs
+  (avril-juin 2026) sont chargés automatiquement pour l'étude pilote;
+- un seed SaaS complet crée **5 études notariales de test** (tenants),
+  leurs comptes de connexion, plans/abonnements/licences/factures SaaS
+  et un jeu minimal d'actes/appels par étude.
+
+- Rechargement : `npm run db:migrate` (après effacement via l'API démo ou base vide)
+- Effacement : bouton « Effacer la démonstration » sur le tableau de bord (Notaire)
+
+4. Se connecter :
+   - Super Admin plateforme: `superadmin` / `ChangezMoi2026!`
+   - Études de test (même mot de passe `ChangezMoi2026!`):
+     - `kouassi.notaire`, `kouassi.secretariat`, `kouassi.clerc1`, `kouassi.comptable`
+     - `konan.notaire`, `konan.secretariat`, `konan.clerc1`, `konan.comptable`
+     - `yao.notaire`, `yao.secretariat`, `yao.clerc1`, `yao.comptable`
+     - `traore.notaire`, `traore.secretariat`, `traore.clerc1`, `traore.comptable`
+     - `soro.notaire`, `soro.secretariat`, `soro.clerc1`, `soro.comptable`
 
    **Changez ces mots de passe immédiatement.**
 

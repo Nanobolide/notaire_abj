@@ -204,7 +204,7 @@ function Actes() {
             <div style={{ alignSelf: "end" }}>
               <button type="button" className="bouton secondaire" onClick={ajouterPartie}>+ Ajouter une partie</button>
             </div>
-            {admin && (<>
+            {voitArgent && (<>
             <label>Valeur de l'acte (FCFA)<input type="number" min="0" value={form.valeur_acte} onChange={maj("valeur_acte")} /></label>
             <label>Honoraires totaux (FCFA)<input type="number" min="0" value={form.honoraires_totaux} onChange={maj("honoraires_totaux")} /></label>
             <label>Montant réglé (FCFA)<input type="number" min="0" value={form.montant_regle} onChange={maj("montant_regle")} /></label>
@@ -304,9 +304,9 @@ function Actes() {
         <table className="registre">
           <thead>
             <tr>
-              <th>N° minute</th><th>N° dossier</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
+              <th>N° minute</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
               <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Délai (j)</th>
-              {voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
+              <th>Échéance ?</th>{voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -324,7 +324,7 @@ function Actes() {
               const fini = a.progression === "Terminé" || a.progression === "Annulé";
               return (
                 <tr key={a.id} style={{ background: c.fond }}>
-                  <td>{a.numero_minute}</td><td>{a.numero_dossier || "—"}</td>
+                  <td>{a.numero_minute}</td>
                   <td>{new Date(a.date_ouverture).toLocaleDateString("fr-FR")}</td>
                   <td>{new Date(a.date_echeance).toLocaleDateString("fr-FR")}</td>
                   <td>{a.nature_acte || "—"}</td>
@@ -337,6 +337,7 @@ function Actes() {
                     </select>
                   </td>
                   <td>{fini ? a.progression : joursEcoules(a.date_ouverture, a.termine_le)}</td>
+                  <td>{respectEcheance(a)}</td>
                   {voitArgent && (<>
                   <td>{formatFcfa(a.honoraires_totaux)}</td>
                   <td style={{ fontWeight: 600 }}>{formatFcfa(resteAPayer(a))}</td>

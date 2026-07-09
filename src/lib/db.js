@@ -8,6 +8,7 @@ const isPg = !!process.env.DATABASE_URL;
 const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "notaria.db");
 
 let pgPool;
+const tenantPools = new Map();
 let sqlite;
 
 function pgSsl() {
@@ -53,6 +54,35 @@ async function pgQuery(sql, params = []) {
   return pgPool.query(sql, params);
 }
 
+function tenantDatabaseMap() {
+  const raw = process.env.TENANT_DATABASE_URLS;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function resolveTenantConnectionString(etudeId) {
+  const map = tenantDatabaseMap();
+  return map[etudeId] || process.env.DATABASE_URL;
+}
+
+function poolForTenant(etudeId) {
+  const connectionString = resolveTenantConnectionString(etudeId);
+  if (!connectionString) throw new Error("DATABASE_URL manquant.");
+  if (connectionString === process.env.DATABASE_URL) {
+    if (!pgPool) pgPool = new Pool({ connectionString, ssl: pgSsl() });
+    return pgPool;
+  }
+  if (!tenantPools.has(connectionString)) {
+    tenantPools.set(connectionString, new Pool({ connectionString, ssl: pgSsl() }));
+  }
+  return tenantPools.get(connectionString);
+}
+
 export function newId() {
   return randomUUID();
 }
@@ -65,8 +95,8 @@ export async function query(sql, params = []) {
 export async function withTenant(etudeId, fn) {
   const client = { etudeId, query };
   if (isPg) {
-    if (!pgPool) pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
-    const c = await pgPool.connect();
+    const tenantPool = poolForTenant(etudeId);
+    const c = await tenantPool.connect();
     try {
       await c.query("BEGIN");
       await c.query("SELECT set_config('app.current_etude_id', $1, true)", [etudeId]);
@@ -101,6 +131,26 @@ export async function audit(client, { etudeId, table, ligneId, action, avant, ap
   );
 }
 
+export async function securityEvent(clientOrDb, {
+  etudeId = null, utilisateur = null, typeEvenement, severite = "info", details = null,
+}) {
+  const runner = clientOrDb?.query ? clientOrDb : { query };
+  const payload = details ? JSON.stringify(details) : null;
+  if (isPg) {
+    await runner.query(
+      `INSERT INTO security_events (etude_id, utilisateur, type_evenement, severite, details)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [etudeId, utilisateur, typeEvenement, severite, payload ? JSON.parse(payload) : null]
+    );
+    return;
+  }
+  await runner.query(
+    `INSERT INTO security_events (id, etude_id, utilisateur, type_evenement, severite, details)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [newId(), etudeId, utilisateur, typeEvenement, severite, payload]
+  );
+}
+
 /** C7 — compte actif et non verrouillé (révocation immédiate). */
 export async function verifierCompteActif(uid) {
   if (isPg) {
@@ -117,7 +167,7 @@ export async function verifierCompteActif(uid) {
   const actifSql = isPg ? "u.actif = true" : "u.actif = 1";
   const { rows } = await query(
     `SELECT 1 FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
-     WHERE u.id = $1 AND ${actifSql} AND e.statut = 'active'
+     WHERE u.id = $1 AND ${actifSql} AND (u.role = 'super_admin' OR e.statut = 'active')
        AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= ${nowSql})`,
     [uid]
   );
@@ -151,6 +201,8 @@ export async function purgerCorbeilleExpiree(etudeId) {
     `DELETE FROM appels_courriers WHERE etude_id = $1 AND supprime_le < datetime('now', '-30 days')`, [etudeId]);
 }
 
-const db = { query, withTenant, newId, audit, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
+const db = { query, withTenant, newId, audit, securityEvent, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
+export const TenantResolver = { resolveTenantConnectionString };
+export const ConnectionManager = { poolForTenant };
 export const pool = db;
 export default db;

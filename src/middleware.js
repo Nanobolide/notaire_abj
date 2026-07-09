@@ -27,14 +27,18 @@ export function middleware(req) {
   if (session) {
     const payload = decodePayload(session.value);
     const doitChanger = payload?.doitChangerMdp === true;
+    const accueil = payload?.role === "super_admin" ? "/admin" : "/tableau-de-bord";
 
     if (doitChanger && pathname !== "/changer-mot-de-passe" && !pathname.startsWith("/api/auth"))
       return NextResponse.redirect(new URL("/changer-mot-de-passe", req.url));
 
     if (!doitChanger && pathname === "/changer-mot-de-passe")
-      return NextResponse.redirect(new URL("/tableau-de-bord", req.url));
+      return NextResponse.redirect(new URL(accueil, req.url));
 
     if (pathname === "/connexion")
+      return NextResponse.redirect(new URL(accueil, req.url));
+
+    if (payload?.role !== "super_admin" && pathname.startsWith("/admin"))
       return NextResponse.redirect(new URL("/tableau-de-bord", req.url));
   }
 

@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
-import { exigerSession } from "@/lib/auth";
+import { withApiGuard } from "@/lib/api-guard";
 import { voitFinancier, voitTableauActes, voitTableauAppels } from "@/lib/acces";
 import { withTenant } from "@/lib/db";
 import { dashboardQueries, isPg, now, actifClause } from "@/lib/dialect";
 
 export async function GET() {
-  try {
-    const s = await exigerSession();
+  return withApiGuard({
+    run: async (s) => {
     const q = dashboardQueries();
     const stats = await withTenant(s.etudeId, async (c) => {
       const run = async (sql) => (await c.query(sql, [s.etudeId])).rows;
@@ -39,6 +38,7 @@ export async function GET() {
         presence,
       };
     });
-    return NextResponse.json(stats);
-  } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
+      return stats;
+    },
+  });
 }
