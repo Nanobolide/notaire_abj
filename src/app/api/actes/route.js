@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
 import { voitRegistreActes, filtrerActe, voitMontants, saisitPrevision, plafondReglement } from "@/lib/acces";
 import { withTenant, audit, newId } from "@/lib/db";
-import { isPg, depuisMinutes } from "@/lib/dialect";
+import { isPg, depuisMinutes, sqlPartiesSubquery } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
@@ -25,12 +25,7 @@ export async function GET(req) {
     if (p.get("du")) ajouter("date_ouverture >= ?", p.get("du"));
     if (p.get("au")) ajouter("date_ouverture <= ?", p.get("au"));
     const where = filtres.length ? " AND " + filtres.join(" AND ") : "";
-    const partiesSql = isPg()
-      ? `COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-                  FROM acte_parties p WHERE p.acte_id = a.id AND p.etude_id = a.etude_id), '')`
-      : `COALESCE((SELECT group_concat(p.nom_partie, ' / ')
-                  FROM (SELECT nom_partie FROM acte_parties p
-                        WHERE p.acte_id = a.id AND p.etude_id = a.etude_id ORDER BY p.ordre)), '')`;
+    const partiesSql = sqlPartiesSubquery("a");
     const { rows, total } = await withTenant(s.etudeId, async (c) => {
       const total = Number((await c.query(
         `SELECT count(*) AS count FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}`, valeurs)).rows[0].count);
@@ -56,6 +51,13 @@ export async function POST(req) {
     if (!voitMontants(s))
       for (const ch of ["emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
         "prestations_annexes","autres_depenses","autres_depenses_motif"]) delete d[ch];
+    if (!d.responsable?.trim()) {
+      const { rows: [n] } = await withTenant(s.etudeId, async (c) =>
+        c.query(
+          `SELECT nom_affiche FROM utilisateurs WHERE etude_id = $1 AND niveau_acces = 'administrateur'
+             AND actif = true ORDER BY cree_le LIMIT 1`, [s.etudeId]));
+      if (n) d.responsable = n.nom_affiche;
+    }
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
     const plafond = plafondReglement(d);

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Entete from "@/components/Entete";
+import { trier, fleche } from "@/lib/tri";
 import { lireJson } from "@/lib/http";
 import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
 import { couleurAppel, joursEcoules, niveauAppel } from "@/lib/regles";
@@ -23,6 +24,9 @@ function Appels() {
   const [enEdition, setEnEdition] = useState(null);
   const majFiltre = (o) => { setPage(1); setFiltres(o); };
   const [filtres, setFiltres] = useState({ statut: "", motif: "", destinataire: "", du: "", au: "" });
+  const [tri, setTri] = useState({ champ: null, sens: "asc" });
+  const clicTri = (champ) => setTri((t) =>
+    t.champ === champ ? { champ, sens: t.sens === "asc" ? "desc" : "asc" } : { champ, sens: "asc" });
   const [recherche, setRecherche] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, pages: 1 });
@@ -144,7 +148,7 @@ function Appels() {
             )}
             <label>Référence dossier
               <input value={form.reference_dossier} onChange={maj("reference_dossier")} placeholder="2026/0000" /></label>
-            <label>Destinataire {sel("destinataire", form.destinataire, maj("destinataire"))}</label>
+            <label>Responsable (reçu par) {sel("responsables_appels", form.destinataire, maj("destinataire"))}</label>
             <label>Mis en relation ?
               <select value={form.mis_en_relation} onChange={maj("mis_en_relation")}>
                 <option value="">—</option><option>Oui</option><option>Non</option>
@@ -181,14 +185,14 @@ function Appels() {
                  onChange={(e) => setRecherche(e.target.value)} style={{ minWidth: 240 }} />
           {sel("statut_traitement", filtres.statut, (e) => setFiltres({ ...filtres, statut: e.target.value }), "Tous statuts")}
           {sel("motif", filtres.motif, (e) => setFiltres({ ...filtres, motif: e.target.value }), "Tous motifs")}
-          {sel("destinataire", filtres.destinataire, (e) => setFiltres({ ...filtres, destinataire: e.target.value }), "Tous destinataires")}
+          {sel("responsables_appels", filtres.destinataire, (e) => setFiltres({ ...filtres, destinataire: e.target.value }), "Tous responsables")}
         </div>
         {erreur && <div className="erreur">{erreur}</div>}
         <table className="registre">
           <thead>
             <tr>
-              <th>N°</th><th>Type</th><th>Date</th><th>Heure</th><th>Réf. dossier</th><th>Client</th>
-              <th>Contact</th><th>Destinataire</th><th>Motif</th><th>Statut</th>
+              <th onClick={() => clicTri("numero")} style={{ cursor: "pointer", userSelect: "none" }}>N°{fleche("numero", tri.champ, tri.sens)}</th><th onClick={() => clicTri("type_flux")} style={{ cursor: "pointer", userSelect: "none" }}>Type{fleche("type_flux", tri.champ, tri.sens)}</th><th onClick={() => clicTri("date_entree")} style={{ cursor: "pointer", userSelect: "none" }}>Date{fleche("date_entree", tri.champ, tri.sens)}</th><th onClick={() => clicTri("heure")} style={{ cursor: "pointer", userSelect: "none" }}>Heure{fleche("heure", tri.champ, tri.sens)}</th><th>Réf. dossier</th><th onClick={() => clicTri("client_nom")} style={{ cursor: "pointer", userSelect: "none" }}>Client{fleche("client_nom", tri.champ, tri.sens)}</th>
+              <th>Contact</th><th onClick={() => clicTri("destinataire")} style={{ cursor: "pointer", userSelect: "none" }}>Destinataire{fleche("destinataire", tri.champ, tri.sens)}</th><th onClick={() => clicTri("motif")} style={{ cursor: "pointer", userSelect: "none" }}>Motif{fleche("motif", tri.champ, tri.sens)}</th><th onClick={() => clicTri("statut_traitement")} style={{ cursor: "pointer", userSelect: "none" }}>Statut{fleche("statut_traitement", tri.champ, tri.sens)}</th>
               <th>Tent.</th><th>Jours</th><th>🚨 Alerte</th><th>Saisi par</th><th>Actions</th>
             </tr>
           </thead>
@@ -197,7 +201,7 @@ function Appels() {
               <tr><td colSpan={15} style={{ textAlign: "center", color: "#5A6478", padding: 20 }}>
                 Registre vide — enregistrez votre première entrée, ou chargez la démonstration depuis le tableau de bord.</td></tr>
             )}
-            {lignes.filter((l) => {
+            {trier(lignes, tri.champ, tri.sens).filter((l) => {
               if (!recherche.trim()) return true;
               const t = recherche.toLowerCase();
               return [l.client_nom, l.reference_dossier, l.telephone, l.email]

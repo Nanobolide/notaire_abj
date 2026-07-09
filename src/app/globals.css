@@ -195,3 +195,12 @@ tr.zoom td { color: #808080; font-style: italic; font-size: 12px; }
 .admin-page h1 {
   color: var(--bleu);
 }
+
+/* Tableaux financiers : montants alignés à droite, lignes zébrées, largeurs stables */
+table.financier { table-layout: fixed; width: 100%; }
+table.financier th, table.financier td { padding: 6px 9px; font-size: 12px; }
+table.financier td.num, table.financier th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.financier tbody tr:nth-child(even) { background: #FAFBFD; }
+table.financier tbody tr:hover { background: #F2F5FA; }
+.badge-ventiler { font-size: 10.5px; font-weight: 500; padding: 2px 8px; border-radius: 10px;
+  background: #F1F3F7; color: #6B7383; white-space: nowrap; }

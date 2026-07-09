@@ -5,12 +5,12 @@ import { lireJson } from "@/lib/http";
 
 const fcfa = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("fr-FR") + " F");
 
-/** Le reste à payer attire l'œil sans agresser : gras + rouge sobre, fond très pâle. */
-function Reste({ valeur }) {
+function Reste({ valeur, ventile = true }) {
   const v = Number(valeur || 0);
+  if (!ventile && v <= 0) return <span className="badge-ventiler">À ventiler</span>;
   if (v === 0) return <span style={{ color: "#2E7D32" }}>Soldé</span>;
   if (v < 0) return <span style={{ color: "#1F3864", fontWeight: 600 }}
-      title="Le client a versé plus que le montant facturé">{fcfa(-v)} en trop-perçu</span>;
+      title="Le client a versé plus que le total facturé">{fcfa(-v)} en trop-perçu</span>;
   return (
     <span style={{ color: "#B03030", fontWeight: 600, background: "#FDF3F3",
                    borderRadius: 4, padding: "1px 6px" }}>{fcfa(v)}</span>
@@ -58,57 +58,69 @@ export default function Comptabilite() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <Compteur valeur={g.emoluments} libelle="Émoluments — revenu de l'étude" ton="vert" />
           <Compteur valeur={g.droits_etat} libelle="Droits d'État à reverser" ton="orange" />
+          <Compteur valeur={g.debours_total} libelle="Débours" ton="orange" />
           <Compteur valeur={g.debours_non_rembourses} libelle="Débours non remboursés" ton="rouge" />
           <Compteur valeur={g.autres_depenses} libelle="Autres dépenses" ton="orange" />
           <Compteur valeur={g.total_facture} libelle="Total facturé aux clients" />
           <Compteur valeur={g.encaisse} libelle="Encaissé" ton="vert" />
           <Compteur valeur={g.reste_a_recouvrer} libelle="Reste à recouvrer" ton="rouge" />
         </div>
+        {Number(g.dossiers_a_ventiler) > 0 && (
+          <p style={{ fontSize: 11.5, color: "#6B7383", background: "#F1F3F7", borderRadius: 7,
+                      padding: "8px 11px", marginBottom: 10 }}>
+            📋 <strong>{g.dossiers_a_ventiler}</strong> dossier{Number(g.dossiers_a_ventiler) > 1 ? "s" : ""} en
+            attente de ventilation. Ouvrez le registre, cliquez sur ✏️ et répartissez le total des frais
+            entre Droits d'État, Débours et Émoluments.
+          </p>
+        )}
         <p style={{ fontSize: 11, color: "#8A6D1F", background: "#FBF6E9", border: "0.5px solid #E4D3A0",
                     borderRadius: 7, padding: "9px 11px" }}>
-          💡 <strong>Ce que paie le client</strong> = émoluments + droits d'État + débours + autres dépenses.
-          Mais <strong>seuls les émoluments sont un revenu de l'étude</strong> : les droits d'État reviennent au Trésor,
-          les débours sont des avances à rembourser. Le chiffre d'affaires réel est donc de <strong>{fcfa(g.emoluments)}</strong>,
-          et non de {fcfa(g.total_facture)}.
+          💡 <strong>Le total des frais</strong> ({fcfa(g.total_facture)}) est ce que paie le client. Le comptable le
+          <strong> ventile</strong> en Droits d'État, Débours et Émoluments. Seuls les <strong>émoluments</strong>{" "}
+          ({fcfa(g.emoluments)}) sont un revenu de l'étude. Total ventilé à ce jour : {fcfa(g.total_ventile)}.
         </p>
 
         <Bandeau>B · RENTABILITÉ PAR CATÉGORIE D'ACTE</Bandeau>
-        <table>
+        <table className="financier">
           <thead><tr>
-            <th>Nature de l'acte</th><th>Dossiers</th><th>Émoluments</th><th>Droits d'État</th>
-            <th>Dépenses</th><th>Total facturé</th><th>Encaissé</th><th>Reste à payer</th>
+            <th style={{ width: "22%" }}>Nature de l'acte</th><th className="num" style={{ width: "8%" }}>Dossiers</th>
+            <th className="num">Émoluments</th><th className="num">Droits d'État</th>
+            <th className="num">Débours</th><th className="num">Total des frais</th>
+            <th className="num">Encaissé</th><th className="num" style={{ width: "14%" }}>Reste à payer</th>
           </tr></thead>
           <tbody>
             {d.parNature.map((r) => (
               <tr key={r.nature_acte}>
                 <td style={{ fontWeight: 500 }}>{r.nature_acte}</td>
-                <td>{r.dossiers}</td>
-                <td style={{ color: "#2E7D32", fontWeight: 500 }}>{fcfa(r.emoluments)}</td>
-                <td>{fcfa(r.droits_etat)}</td>
-                <td>{fcfa(r.depenses)}</td>
-                <td>{fcfa(r.total_facture)}</td>
-                <td>{fcfa(r.encaisse)}</td>
-                <td><Reste valeur={r.reste} /></td>
+                <td className="num">{r.dossiers}</td>
+                <td className="num" style={{ color: "#2E7D32", fontWeight: 600 }}>{fcfa(r.emoluments)}</td>
+                <td className="num">{fcfa(r.droits_etat)}</td>
+                <td className="num">{fcfa(r.depenses)}</td>
+                <td className="num">{fcfa(r.total_facture)}</td>
+                <td className="num">{fcfa(r.encaisse)}</td>
+                <td className="num"><Reste valeur={r.reste} ventile={Number(r.emoluments) + Number(r.droits_etat) > 0} /></td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <Bandeau>C · RENTABILITÉ PAR COLLABORATEUR</Bandeau>
-        <table>
+        <table className="financier">
           <thead><tr>
-            <th>Collaborateur</th><th>Dossiers</th><th>En cours</th>
-            <th>Émoluments générés</th><th>Débours engagés</th><th>Encaissé</th><th>Reste à payer</th>
+            <th style={{ width: "24%" }}>Collaborateur</th><th className="num" style={{ width: "9%" }}>Dossiers</th>
+            <th className="num" style={{ width: "9%" }}>En cours</th>
+            <th className="num">Émoluments générés</th><th className="num">Débours</th>
+            <th className="num">Encaissé</th><th className="num" style={{ width: "14%" }}>Reste à payer</th>
           </tr></thead>
           <tbody>
             {d.parCollaborateur.map((r) => (
               <tr key={r.responsable}>
                 <td style={{ fontWeight: 500 }}>{r.responsable}</td>
-                <td>{r.dossiers}</td><td>{r.en_cours}</td>
-                <td style={{ color: "#2E7D32", fontWeight: 500 }}>{fcfa(r.emoluments)}</td>
-                <td>{fcfa(r.debours)}</td>
-                <td>{fcfa(r.encaisse)}</td>
-                <td><Reste valeur={r.reste} /></td>
+                <td className="num">{r.dossiers}</td><td className="num">{r.en_cours}</td>
+                <td className="num" style={{ color: "#2E7D32", fontWeight: 600 }}>{fcfa(r.emoluments)}</td>
+                <td className="num">{fcfa(r.debours)}</td>
+                <td className="num">{fcfa(r.encaisse)}</td>
+                <td className="num"><Reste valeur={r.reste} ventile={Number(r.emoluments) > 0} /></td>
               </tr>
             ))}
           </tbody>
@@ -117,14 +129,16 @@ export default function Comptabilite() {
         <Bandeau>D · BALANCE DES TIERS — SOLDE DE CHAQUE CLIENT</Bandeau>
         <p className="sous-titre">Ce que chaque client doit encore, sans ouvrir un seul dossier physique.
           Les 30 soldes les plus importants.</p>
-        <table>
-          <thead><tr><th>Client</th><th>Dossiers</th><th>Facturé</th><th>Encaissé</th><th>Solde</th></tr></thead>
+        <table className="financier">
+          <thead><tr><th style={{ width: "38%" }}>Client</th><th className="num" style={{ width: "10%" }}>Dossiers</th>
+            <th className="num">Total des frais</th><th className="num">Encaissé</th>
+            <th className="num" style={{ width: "18%" }}>Solde</th></tr></thead>
           <tbody>
             {d.balance.map((r, i) => (
               <tr key={i}>
-                <td>{r.client}</td><td>{r.dossiers}</td>
-                <td>{fcfa(r.facture)}</td><td>{fcfa(r.encaisse)}</td>
-                <td><Reste valeur={r.solde} /></td>
+                <td>{r.client}</td><td className="num">{r.dossiers}</td>
+                <td className="num">{fcfa(r.facture)}</td><td className="num">{fcfa(r.encaisse)}</td>
+                <td className="num"><Reste valeur={r.solde} ventile={r.ventile !== false && r.ventile !== 0} /></td>
               </tr>
             ))}
             {d.balance.length === 0 && (
@@ -137,6 +151,7 @@ export default function Comptabilite() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Compteur valeur={d.formalites.depense} libelle="Dépensé en formalités" ton="orange" />
           <Compteur valeur={d.formalites.a_rembourser} libelle="À rembourser par les clients" ton="rouge" />
+          <Compteur valeur={d.formalites.debours} libelle="Débours engagés" ton="orange" />
           <div style={{ background: "#fff", border: "0.5px solid #D9DEE8", borderLeft: "4px solid #B03030",
                         borderRadius: "0 8px 8px 0", padding: "9px 13px", minWidth: 138 }}>
             <div style={{ fontSize: 18, fontWeight: 600, color: "#B03030" }}>{d.formalites.dossiers_droits_impayes}</div>

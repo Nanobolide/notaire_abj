@@ -7,11 +7,8 @@ import { depuisMinutes } from "@/lib/dialect";
 export async function GET(req) {
   try {
     const s = await exigerSession();
-    if (!voitRegistreAppels(s)) {
-      const e = new Error("Le Comptable n'a pas accès au registre des appels.");
-      e.status = 403;
-      throw e;
-    }
+    if (!voitRegistreAppels(s))
+      return NextResponse.json({ erreur: "Accès refusé." }, { status: 403 });
     const p = new URL(req.url).searchParams;
     const page = Math.max(1, parseInt(p.get("page") || "1", 10));
     const parPage = 50;

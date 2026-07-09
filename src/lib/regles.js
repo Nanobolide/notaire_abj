@@ -84,13 +84,14 @@ export function respectEcheance(acte) {
 
 export function totalFacture(acte) {
   const n = (v) => Number(v || 0);
+  const totalFrais = n(acte.honoraires_totaux);
   const ventile = n(acte.emoluments) + n(acte.droits_etat) + n(acte.debours) +
                   n(acte.prestations_annexes) + n(acte.autres_depenses);
-  return ventile > 0 ? ventile : n(acte.honoraires_totaux);
+  return totalFrais > 0 ? totalFrais : ventile;
 }
 
 export function resteAPayer(acte) {
-  return totalFacture(acte) - Number(acte.montant_regle || 0);
+  return Math.max(0, totalFacture(acte) - Number(acte.montant_regle || 0));
 }
 
 export function formatFcfa(n) {

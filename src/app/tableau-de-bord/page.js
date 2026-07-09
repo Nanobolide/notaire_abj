@@ -101,15 +101,17 @@ export default function TableauDeBord() {
           )}
 
           {/* ======== ① ACTES ======== */}
+          {s.actes && (<>
           <div className="bandeau-section">① SUIVI DES ACTES ET MINUTES</div>
           <div className="compteurs">
             <Compteur valeur={s.actes?.total} libelle="Total dossiers" />
             <Compteur valeur={s.actes?.en_cours} libelle="En cours" />
             <Compteur valeur={s.actes?.termines} libelle="Terminés" />
             <Compteur valeur={s.actes?.annules} libelle="Annulés" />
-            <Compteur valeur={"⚠ " + s.actes.echeances_depassees} libelle="Échéances dépassées" niveau={Number(s.actes.echeances_depassees) > 0 ? "avert" : ""} />
-            <Compteur valeur={"🔴 " + s.actes.critiques} libelle="Délai final dépassé" niveau={Number(s.actes.critiques) > 0 ? "alerte" : ""} />
+            <Compteur valeur={"⚠ " + s.actes?.echeances_depassees} libelle="Échéances dépassées" niveau={Number(s.actes?.echeances_depassees) > 0 ? "avert" : ""} />
+            <Compteur valeur={"🔴 " + s.actes?.critiques} libelle="Délai final dépassé" niveau={Number(s.actes?.critiques) > 0 ? "alerte" : ""} />
           </div>
+          </>)}
 
           {s.finances && (
           <Bloc titre="Suivi financier (FCFA) — tous dossiers confondus — visible par le Notaire et le Comptable" lien="/comptabilite">
@@ -176,15 +178,17 @@ export default function TableauDeBord() {
           </div>
 
           {/* ======== ② APPELS ======== */}
+          {s.appels && (<>
           <div className="bandeau-section" style={{ marginTop: 22 }}>② JOURNAL DES APPELS ET COURRIERS</div>
           <div className="compteurs">
             <Compteur valeur={s.appels?.total} libelle="Total entrées" />
             <Compteur valeur={s.appels?.resolus} libelle="Résolus" />
-            <Compteur valeur={s.appels.en_cours} libelle="En cours" />
-            <Compteur valeur={s.appels.en_attente} libelle="En attente du Clerc" />
+            <Compteur valeur={s.appels?.en_cours} libelle="En cours" />
+            <Compteur valeur={s.appels?.en_attente} libelle="En attente du Clerc" />
             <Compteur valeur={"⚠ " + s.appels?.tentatives_3plus} libelle="Tentatives ≥ 3" niveau={Number(s.appels?.tentatives_3plus) > 0 ? "avert" : ""} />
-            <Compteur valeur={"🚨 " + s.appels.urgents} libelle="Alertes 🚨 (> 5 j)" niveau={Number(s.appels.urgents) > 0 ? "alerte" : ""} />
+            <Compteur valeur={"🚨 " + s.appels?.urgents} libelle="Alertes 🚨 (> 5 j)" niveau={Number(s.appels?.urgents) > 0 ? "alerte" : ""} />
           </div>
+          </>)}
 
           <div className="deux-colonnes">
             <Bloc titre="Répartition par type de flux" lien="/appels?vue=registre">

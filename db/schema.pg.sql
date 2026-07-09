@@ -317,10 +317,10 @@ $$ LANGUAGE sql;
 CREATE OR REPLACE FUNCTION auth_lookup(p_identifiant TEXT)
 RETURNS TABLE (id UUID, etude_id UUID, role VARCHAR, nom_affiche VARCHAR, fonction VARCHAR,
                hash_mot_de_passe VARCHAR, doit_changer_mdp BOOLEAN, echecs_connexion INT,
-               verrouille_jusqua TIMESTAMPTZ, etude_statut VARCHAR, etude_nom VARCHAR)
+               verrouille_jusqua TIMESTAMPTZ, etude_statut VARCHAR, etude_nom VARCHAR, niveau_acces VARCHAR)
 LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT u.id, u.etude_id, u.role, u.nom_affiche, u.fonction, u.hash_mot_de_passe,
-         u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua, e.statut, e.nom
+         u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua, e.statut, e.nom, u.niveau_acces
   FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
   WHERE u.identifiant = p_identifiant AND u.actif = true;
 $$;
