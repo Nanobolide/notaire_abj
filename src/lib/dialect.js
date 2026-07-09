@@ -122,16 +122,6 @@ export function sqlActesInsert() {
      RETURNING *`;
 }
 
-export function sqlPartiesSubquery(alias = "a") {
-  return isPg()
-    ? `(SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-        FROM acte_parties p WHERE p.acte_id = ${alias}.id AND p.etude_id = ${alias}.etude_id)`
-    : `(SELECT group_concat(p.nom_partie, ' / ')
-        FROM (SELECT nom_partie FROM acte_parties p
-              WHERE p.acte_id = ${alias}.id AND p.etude_id = ${alias}.etude_id
-              ORDER BY p.ordre))`;
-}
-
 export function sqlPartiesInsert() {
   return isPg()
     ? `INSERT INTO acte_parties (etude_id, acte_id, ordre, nom_partie) VALUES ($1,$2,$3,$4)`
