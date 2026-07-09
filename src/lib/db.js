@@ -151,6 +151,36 @@ export async function securityEvent(clientOrDb, {
   );
 }
 
+/** C7 + C14 — état courant du compte (actif, niveau, fonction). */
+export async function etatCompte(uid) {
+  if (isPg) {
+    try {
+      const { rows } = await query(`SELECT * FROM compte_etat($1)`, [uid]);
+      const r = rows[0];
+      if (!r || r.ok !== true) return null;
+      try { await query(`SELECT marquer_activite($1)`, [uid]); } catch {}
+      return { niveauAcces: r.niveau_acces, fonction: r.fonction };
+    } catch {
+      // repli si fonction absente
+    }
+  }
+  const nowSql = isPg ? "now()" : "datetime('now')";
+  const actifSql = isPg ? "u.actif = true" : "u.actif = 1";
+  const { rows } = await query(
+    `SELECT u.niveau_acces, u.fonction FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+     WHERE u.id = $1 AND ${actifSql} AND (u.role = 'super_admin' OR e.statut = 'active')
+       AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= ${nowSql})`,
+    [uid]
+  );
+  if (!rows[0]) return null;
+  const maj = isPg ? "now()" : "datetime('now')";
+  try { await query(`UPDATE utilisateurs SET derniere_activite = ${maj} WHERE id = $1`, [uid]); } catch {}
+  return {
+    niveauAcces: rows[0].niveau_acces || "standard",
+    fonction: rows[0].fonction || null,
+  };
+}
+
 /** C7 — compte actif et non verrouillé (révocation immédiate). */
 export async function verifierCompteActif(uid) {
   if (isPg) {
@@ -201,7 +231,7 @@ export async function purgerCorbeilleExpiree(etudeId) {
     `DELETE FROM appels_courriers WHERE etude_id = $1 AND supprime_le < datetime('now', '-30 days')`, [etudeId]);
 }
 
-const db = { query, withTenant, newId, audit, securityEvent, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
+const db = { query, withTenant, newId, audit, securityEvent, etatCompte, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
 export const TenantResolver = { resolveTenantConnectionString };
 export const ConnectionManager = { poolForTenant };
 export const pool = db;

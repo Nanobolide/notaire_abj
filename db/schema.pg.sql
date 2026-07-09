@@ -77,6 +77,17 @@ CREATE TABLE IF NOT EXISTS actes (
   termine_le TIMESTAMPTZ,
   valeur_acte BIGINT NOT NULL DEFAULT 0,
   honoraires_totaux BIGINT NOT NULL DEFAULT 0,
+  emoluments BIGINT NOT NULL DEFAULT 0,
+  exonere_tva BOOLEAN NOT NULL DEFAULT false,
+  droits_etat BIGINT NOT NULL DEFAULT 0,
+  debours BIGINT NOT NULL DEFAULT 0,
+  debours_rembourses BOOLEAN NOT NULL DEFAULT false,
+  prestations_annexes BIGINT NOT NULL DEFAULT 0,
+  autres_depenses BIGINT NOT NULL DEFAULT 0,
+  autres_depenses_motif VARCHAR,
+  depenses_formalites BIGINT NOT NULL DEFAULT 0,
+  statut_formalites VARCHAR NOT NULL DEFAULT 'Pas encore débuté'
+    CHECK (statut_formalites IN ('Pas encore débuté','Débuté','En cours','Terminé')),
   montant_regle BIGINT NOT NULL DEFAULT 0,
   statut_paiement VARCHAR(20) NOT NULL DEFAULT 'En attente',
   difficultes TEXT,
@@ -151,7 +162,17 @@ CREATE TABLE IF NOT EXISTS parametres_etude (
   appel_s1 INT NOT NULL DEFAULT 3, appel_s2 INT NOT NULL DEFAULT 5, appel_s3 INT NOT NULL DEFAULT 10,
   couleur_n1 VARCHAR NOT NULL DEFAULT '#FFF4C2', couleur_n2 VARCHAR NOT NULL DEFAULT '#FFD9A0',
   couleur_n3 VARCHAR NOT NULL DEFAULT '#FF9E9E', couleur_ok VARCHAR NOT NULL DEFAULT '#E9F7EC',
+  taux_tva NUMERIC(5,4) NOT NULL DEFAULT 0.18 CHECK (taux_tva >= 0 AND taux_tva <= 1),
   maj_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS avis (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  fonction VARCHAR,
+  categorie VARCHAR NOT NULL DEFAULT 'Amélioration'
+    CHECK (categorie IN ('Amélioration','Difficulté rencontrée','Erreur / bug','Autre')),
+  message TEXT NOT NULL,
+  recu_le TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS demandes_recuperation (
@@ -319,6 +340,16 @@ BEGIN
     WHERE id = p_user;
   END IF;
 END $$;
+
+CREATE OR REPLACE FUNCTION compte_etat(p_uid UUID)
+RETURNS TABLE (ok BOOLEAN, niveau_acces VARCHAR, fonction VARCHAR)
+LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT (u.actif AND (u.role = 'super_admin' OR e.statut = 'active')
+          AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now())) AS ok,
+         u.niveau_acces, u.fonction
+  FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+  WHERE u.id = p_uid;
+$$;
 
 CREATE OR REPLACE FUNCTION compte_est_actif(p_uid UUID)
 RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$

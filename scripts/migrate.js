@@ -11,6 +11,67 @@ const { seedSaasComplete } = require("./seed-saas-complete");
 
 const ROOT = path.join(__dirname, "..");
 
+const ACTES_COLS_PG = [
+  ["emoluments", "BIGINT NOT NULL DEFAULT 0"],
+  ["exonere_tva", "BOOLEAN NOT NULL DEFAULT false"],
+  ["droits_etat", "BIGINT NOT NULL DEFAULT 0"],
+  ["debours", "BIGINT NOT NULL DEFAULT 0"],
+  ["debours_rembourses", "BOOLEAN NOT NULL DEFAULT false"],
+  ["prestations_annexes", "BIGINT NOT NULL DEFAULT 0"],
+  ["autres_depenses", "BIGINT NOT NULL DEFAULT 0"],
+  ["autres_depenses_motif", "VARCHAR"],
+  ["depenses_formalites", "BIGINT NOT NULL DEFAULT 0"],
+  ["statut_formalites", "VARCHAR NOT NULL DEFAULT 'Pas encore débuté'"],
+];
+
+async function migrateV27Pg(client) {
+  for (const [col, def] of ACTES_COLS_PG)
+    await client.query(`ALTER TABLE actes ADD COLUMN IF NOT EXISTS ${col} ${def}`);
+  await client.query(`ALTER TABLE parametres_etude ADD COLUMN IF NOT EXISTS taux_tva NUMERIC(5,4) NOT NULL DEFAULT 0.18`);
+  await client.query(`CREATE TABLE IF NOT EXISTS avis (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fonction VARCHAR,
+    categorie VARCHAR NOT NULL DEFAULT 'Amélioration',
+    message TEXT NOT NULL,
+    recu_le TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await client.query(`CREATE OR REPLACE FUNCTION compte_etat(p_uid UUID)
+    RETURNS TABLE (ok BOOLEAN, niveau_acces VARCHAR, fonction VARCHAR)
+    LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+      SELECT (u.actif AND (u.role = 'super_admin' OR e.statut = 'active')
+              AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now())) AS ok,
+             u.niveau_acces, u.fonction
+      FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+      WHERE u.id = p_uid;
+    $$`);
+}
+
+function migrateV27Sqlite(db) {
+  const cols = [
+    ["emoluments", "INTEGER NOT NULL DEFAULT 0"],
+    ["exonere_tva", "INTEGER NOT NULL DEFAULT 0"],
+    ["droits_etat", "INTEGER NOT NULL DEFAULT 0"],
+    ["debours", "INTEGER NOT NULL DEFAULT 0"],
+    ["debours_rembourses", "INTEGER NOT NULL DEFAULT 0"],
+    ["prestations_annexes", "INTEGER NOT NULL DEFAULT 0"],
+    ["autres_depenses", "INTEGER NOT NULL DEFAULT 0"],
+    ["autres_depenses_motif", "TEXT"],
+    ["depenses_formalites", "INTEGER NOT NULL DEFAULT 0"],
+    ["statut_formalites", "TEXT NOT NULL DEFAULT 'Pas encore débuté'"],
+  ];
+  for (const [col, def] of cols) {
+    try { db.exec(`ALTER TABLE actes ADD COLUMN ${col} ${def}`); } catch {}
+  }
+  try { db.exec(`ALTER TABLE parametres_etude ADD COLUMN taux_tva REAL NOT NULL DEFAULT 0.18`); } catch {}
+  db.exec(`CREATE TABLE IF NOT EXISTS avis (
+    id TEXT PRIMARY KEY,
+    fonction TEXT,
+    categorie TEXT NOT NULL DEFAULT 'Amélioration',
+    message TEXT NOT NULL,
+    recu_le TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+}
+
 async function connectWithRetry(client, attempts = 5) {
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -47,6 +108,7 @@ async function migratePg() {
     }
   }
 
+  await migrateV27Pg(client);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
@@ -116,6 +178,7 @@ async function migratePgWithConnectionString(url, label = "postgres") {
     console.log(`→ ${file}`);
     await client.query(sql);
   }
+  await migrateV27Pg(client);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
@@ -200,6 +263,7 @@ async function migrateSqliteAsync() {
     console.log(`→ ${file}`);
     db.exec(fs.readFileSync(path.join(ROOT, file), "utf8"));
   }
+  migrateV27Sqlite(db);
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN derniere_activite TEXT"); } catch {}
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN nom_complet TEXT"); } catch {}
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN niveau_acces TEXT NOT NULL DEFAULT 'standard'"); } catch {}

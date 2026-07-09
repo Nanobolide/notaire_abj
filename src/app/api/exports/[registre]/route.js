@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { exigerSession, exigerStepUp } from "@/lib/auth";
-import { voitRegistreActes, voitRegistreAppels, voitMontants } from "@/lib/acces";
+import { voitRegistreActes, voitRegistreAppels, voitMontants, saisitPrevision, estComptable } from "@/lib/acces";
 import { withTenant } from "@/lib/db";
 import { sqlPartiesSubquery } from "@/lib/dialect";
-import { couleurActe, couleurAppel, joursEcoules, respectEcheance } from "@/lib/regles";
+import { couleurActe, couleurAppel, joursEcoules } from "@/lib/regles";
 
 const BLEU = "FF1F3864";
 const fond = (hex) => ({ type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex.replace("#", "") } });
@@ -25,9 +25,9 @@ export async function GET(req, { params }) {
       return NextResponse.json({ erreur: "Vous n'avez pas accès au registre des actes." }, { status: 403 });
     if (registre === "appels" && !voitRegistreAppels(s))
       return NextResponse.json({ erreur: "Vous n'avez pas accès au registre des appels." }, { status: 403 });
-    const admin = voitMontants(s);  // C12 — le Comptable voit les montants
-
-
+    const admin = voitMontants(s);
+    const prevision = saisitPrevision(s);
+    const notes = !estComptable(s);
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet(registre === "actes" ? "Suivi des Actes" : "Appels & Courriers");
 
@@ -46,11 +46,21 @@ export async function GET(req, { params }) {
           ["Nature", "nature_acte", 16], ["Complexité", "complexite", 11],
           ["Parties", "parties", 28], ["Responsable", "responsable", 12],
           ["Conservation", "conservation_fonciere", 14], ["Étape / Statut", "progression", 18],
-          ["Délai (j)", null, 9], ["Échéance ?", null, 11],
-          ...(admin ? [["Valeur (FCFA)", "valeur_acte", 14], ["Honoraires (FCFA)", "honoraires_totaux", 15],
-                       ["Réglé (FCFA)", "montant_regle", 13], ["Reste (FCFA)", null, 13],
+          ["Délai (j)", null, 9], ["Formalités", "statut_formalites", 16],
+          ...(admin ? [["Valeur (FCFA)", "valeur_acte", 14],
+                       ["Émoluments (FCFA)", "emoluments", 15],
+                       ["Droits d'État (FCFA)", "droits_etat", 16],
+                       ["Débours (FCFA)", "debours", 13],
+                       ["Prestations annexes (FCFA)", "prestations_annexes", 18],
+                       ["Autres dépenses (FCFA)", "autres_depenses", 17],
+                       ["Total facturé (FCFA)", null, 16],
+                       ["Réglé (FCFA)", "montant_regle", 13],
+                       ["Reste à payer (FCFA)", null, 16],
                        ["Paiement", "statut_paiement", 11]] : []),
-          ["Difficultés", "difficultes", 24], ["Observations", "observations", 24],
+          ...(prevision && !admin ? [["Frais annoncés (FCFA)", "honoraires_totaux", 16],
+                                     ["Réglé (FCFA)", "montant_regle", 13]] : []),
+          ...(admin ? [["Frais annoncés (prévision)", "honoraires_totaux", 18]] : []),
+          ...(notes ? [["Difficultés", "difficultes", 24], ["Observations", "observations", 24]] : []),
         ];
         ws.columns = cols.map(([h, , w]) => ({ width: w }));
         const enTete = ws.addRow(cols.map(([h]) => h));
@@ -63,10 +73,12 @@ export async function GET(req, { params }) {
           }));
           const iDelai = cols.findIndex(([h]) => h === "Délai (j)") + 1;
           ligne.getCell(iDelai).value = fini ? a.progression : joursEcoules(a.date_ouverture, a.termine_le);
-          ligne.getCell(iDelai + 1).value = respectEcheance(a);
           if (admin) {
-            const iReste = cols.findIndex(([h]) => h === "Reste (FCFA)") + 1;
-            ligne.getCell(iReste).value = Number(a.honoraires_totaux) - Number(a.montant_regle);
+            const n = (v) => Number(v || 0);
+            const total = n(a.emoluments) + n(a.droits_etat) + n(a.debours) +
+                          n(a.prestations_annexes) + n(a.autres_depenses);
+            ligne.getCell(cols.findIndex(([h]) => h === "Total facturé (FCFA)") + 1).value = total;
+            ligne.getCell(cols.findIndex(([h]) => h === "Reste à payer (FCFA)") + 1).value = total - n(a.montant_regle);
           }
           const c2 = couleurActe(a);
           if (c2.fond !== "#FFFFFF") ligne.eachCell((cell) => { cell.fill = fond(c2.fond); });
