@@ -7,7 +7,8 @@ export async function GET() {
     const s = await exigerSession();
     const listes = await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(
-        `SELECT type_liste, valeur FROM referentiels WHERE actif = true ORDER BY type_liste, ordre`);
+        `SELECT type_liste, valeur FROM referentiels WHERE etude_id = $1 AND actif = true ORDER BY type_liste, ordre`,
+        [s.etudeId]);
       const out = {};
       for (const r of rows) (out[r.type_liste] ||= []).push(r.valeur);
       return out;

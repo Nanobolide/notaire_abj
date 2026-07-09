@@ -13,6 +13,7 @@ export default function Entete() {
   useEffect(() => {
     fetch("/api/session").then((r) => r.json()).then((d) => {
       if (d.doitChangerMdp) { routeur.push("/changer-mot-de-passe"); return; }
+      if (d.role === "super_admin") { routeur.push("/admin"); return; }
       setSession(d);
     }).catch(() => {});
   }, [routeur]);

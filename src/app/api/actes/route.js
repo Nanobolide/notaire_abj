@@ -1,21 +1,20 @@
 import { NextResponse } from "next/server";
-import { exigerSession, estAdmin } from "@/lib/auth";
-
-/** C2 — le volet financier ne sort JAMAIS vers un collaborateur, quelle que soit la route. */
-export function filtrerActe(row, s) {
-  if (estAdmin(s) || !row) return row;
-  const { valeur_acte, honoraires_totaux, montant_regle, statut_paiement, ...reste } = row;
-  return reste;
-}
+import { exigerSession } from "@/lib/auth";
+import { filtrerActe, voitMontants, voitRegistreActes } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
 
 export async function GET(req) {
   try {
     const s = await exigerSession();
+    if (!voitRegistreActes(s)) {
+      const e = new Error("L'Accueil n'a pas accès au registre des actes.");
+      e.status = 403;
+      throw e;
+    }
     const p = new URL(req.url).searchParams;
     const page = Math.max(1, parseInt(p.get("page") || "1", 10));
     const parPage = 50;
-    const filtres = []; const valeurs = [];
+    const filtres = []; const valeurs = [s.etudeId];
     const ajouter = (sql, v) => { valeurs.push(v); filtres.push(sql.replace("?", "$" + valeurs.length)); };
     if (p.get("progression")) ajouter("progression = ?", p.get("progression"));
     if (p.get("conservation")) ajouter("conservation_fonciere = ?", p.get("conservation"));
@@ -27,20 +26,17 @@ export async function GET(req) {
     const where = filtres.length ? " AND " + filtres.join(" AND ") : "";
     const { rows, total } = await withTenant(s.etudeId, async (c) => {
       const total = Number((await c.query(
-        `SELECT count(*) FROM actes a WHERE a.supprime_le IS NULL ${where}`, valeurs)).rows[0].count);
+        `SELECT count(*) AS count FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}`, valeurs)).rows[0].count);
       const rows = (await c.query(
         `SELECT a.*,
                 COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-                          FROM acte_parties p WHERE p.acte_id = a.id), '') AS parties
-         FROM actes a WHERE a.supprime_le IS NULL ${where}
+                          FROM acte_parties p WHERE p.acte_id = a.id AND p.etude_id = a.etude_id), '') AS parties
+         FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL ${where}
          ORDER BY a.date_ouverture DESC, a.cree_le DESC
          LIMIT ${parPage} OFFSET ${(page - 1) * parPage}`, valeurs)).rows;
       return { rows, total };
     });
-    const visibles = estAdmin(s) ? rows : rows.map((r) => {
-      const { valeur_acte, honoraires_totaux, montant_regle, statut_paiement, ...reste } = r;
-      return reste;
-    });
+    const visibles = rows.map((r) => filtrerActe(r, s));
     return NextResponse.json({ lignes: visibles, total, page, pages: Math.ceil(total / parPage) || 1 });
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
@@ -50,8 +46,10 @@ export async function POST(req) {
   try {
     const s = await exigerSession(); s2 = s;
     const d = await req.json();
-    if (!estAdmin(s))
-      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
+    if (!voitMontants(s))
+      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement",
+        "emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
+        "prestations_annexes"]) delete d[ch];
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
     if (Number(d.montant_regle || 0) > Number(d.honoraires_totaux || 0))
@@ -62,9 +60,9 @@ export async function POST(req) {
     if (!d.forcer) {
       const doublon = await withTenant(s.etudeId, async (c) =>
         (await c.query(
-          `SELECT numero_minute FROM actes WHERE supprime_le IS NULL
-             AND (numero_minute = $1 OR (nature_acte = $2 AND cree_le > now() - interval '5 minutes'))
-           LIMIT 1`, [d.numero_minute, d.nature_acte || null])).rows[0]);
+          `SELECT numero_minute FROM actes WHERE etude_id = $1 AND supprime_le IS NULL
+             AND (numero_minute = $2 OR (nature_acte = $3 AND cree_le > now() - interval '5 minutes'))
+           LIMIT 1`, [s.etudeId, d.numero_minute, d.nature_acte || null])).rows[0]);
       if (doublon)
         return NextResponse.json({ doublon: true,
           message: `Un acte similaire existe déjà (${doublon.numero_minute}). Enregistrer quand même ?` }, { status: 409 });

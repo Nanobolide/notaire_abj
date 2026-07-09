@@ -20,7 +20,8 @@ export default function Connexion() {
     });
     const data = await lireJson(rep);
     if (!rep.ok) { setErreur(data.erreur || "Connexion impossible."); setEnvoi(false); return; }
-    routeur.push(data.doitChangerMdp ? "/changer-mot-de-passe" : "/tableau-de-bord");
+    if (data.doitChangerMdp) { routeur.push("/changer-mot-de-passe"); return; }
+    routeur.push(data.role === "super_admin" ? "/admin" : "/tableau-de-bord");
   };
 
   return (

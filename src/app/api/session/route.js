@@ -5,5 +5,6 @@ import { session } from "@/lib/auth";
 export async function GET() {
   const s = session();
   if (!s) return NextResponse.json({ erreur: "Non authentifié" }, { status: 401 });
-  return NextResponse.json({ nom: s.nom, role: s.role, etudeNom: s.etudeNom || null, doitChangerMdp: !!s.doitChangerMdp, fonction: s.fonction || null });
+  return NextResponse.json({ nom: s.nom, role: s.role, etudeNom: s.etudeNom || null, doitChangerMdp: !!s.doitChangerMdp, fonction: s.fonction || null,
+    niveauAcces: s.niveauAcces || null, mfaEnabled: !!s.mfaEnabled, mfaLevel: s.mfaLevel || "none" });
 }

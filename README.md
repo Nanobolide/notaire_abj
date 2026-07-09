@@ -131,18 +131,26 @@ Configuré via `render.yaml` (plan free) :
    npm install
    npm run dev          # migre + http://localhost:3000
    ```
-## Données de démonstration (présentation client)
+## Données de démonstration (présentation client / PO)
 
-À chaque migration, si le marqueur `2026/0201` est absent, **30 actes** et **30 appels**
-fictifs (avril-juin 2026) sont chargés automatiquement — tableau de bord, couleurs,
-finances et registres prêts pour une démo.
+À chaque migration:
+- si le marqueur `2026/0201` est absent, **30 actes** et **30 appels** fictifs
+  (avril-juin 2026) sont chargés automatiquement pour l'étude pilote;
+- un seed SaaS complet crée **5 études notariales de test** (tenants),
+  leurs comptes de connexion, plans/abonnements/licences/factures SaaS
+  et un jeu minimal d'actes/appels par étude.
 
 - Rechargement : `npm run db:migrate` (après effacement via l'API démo ou base vide)
 - Effacement : bouton « Effacer la démonstration » sur le tableau de bord (Notaire)
 
 4. Se connecter :
-   - `notaire` / `ChangezMoi2026!` (Administrateur d'étude)
-   - `secretariat`, `clerc1`, `accueil` / même mot de passe (collaborateurs)
+   - Super Admin plateforme: `superadmin` / `ChangezMoi2026!`
+   - Études de test (même mot de passe `ChangezMoi2026!`):
+     - `kouassi.notaire`, `kouassi.secretariat`, `kouassi.clerc1`, `kouassi.comptable`
+     - `konan.notaire`, `konan.secretariat`, `konan.clerc1`, `konan.comptable`
+     - `yao.notaire`, `yao.secretariat`, `yao.clerc1`, `yao.comptable`
+     - `traore.notaire`, `traore.secretariat`, `traore.clerc1`, `traore.comptable`
+     - `soro.notaire`, `soro.secretariat`, `soro.clerc1`, `soro.comptable`
 
    **Changez ces mots de passe immédiatement.**
 

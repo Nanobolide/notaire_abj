@@ -81,7 +81,7 @@ export default function TableauDeBord() {
               })}
             </div>
           )}
-          {admin && Number(s.actes.total) === 0 && Number(s.appels.total) === 0 && (
+          {admin && s.actes && s.appels && Number(s.actes?.total) === 0 && Number(s.appels?.total) === 0 && (
             <div className="carte" style={{ borderLeft: "4px solid var(--or)", borderRadius: "0 8px 8px 0" }}>
               <h1 style={{ fontSize: 15 }}>Registres vides — voulez-vous tester avec des données fictives ?</h1>
               <p className="sous-titre">Charge 30 actes et 30 appels de démonstration (avril-juin 2026), identiques
@@ -91,7 +91,7 @@ export default function TableauDeBord() {
               </button>
             </div>
           )}
-          {admin && Number(s.actes.total) > 0 && (
+          {admin && s.actes && Number(s.actes?.total) > 0 && (
             <p className="sous-titre" style={{ textAlign: "right" }}>
               <button className="bouton secondaire" style={{ padding: "4px 10px", fontSize: 12 }}
                 onClick={effacerDemo} disabled={demoEnCours}>
@@ -103,24 +103,24 @@ export default function TableauDeBord() {
           {/* ======== ① ACTES ======== */}
           <div className="bandeau-section">① SUIVI DES ACTES ET MINUTES</div>
           <div className="compteurs">
-            <Compteur valeur={s.actes.total} libelle="Total dossiers" />
-            <Compteur valeur={s.actes.en_cours} libelle="En cours" />
-            <Compteur valeur={s.actes.termines} libelle="Terminés" />
-            <Compteur valeur={s.actes.annules} libelle="Annulés" />
+            <Compteur valeur={s.actes?.total} libelle="Total dossiers" />
+            <Compteur valeur={s.actes?.en_cours} libelle="En cours" />
+            <Compteur valeur={s.actes?.termines} libelle="Terminés" />
+            <Compteur valeur={s.actes?.annules} libelle="Annulés" />
             <Compteur valeur={"⚠ " + s.actes.echeances_depassees} libelle="Échéances dépassées" niveau={Number(s.actes.echeances_depassees) > 0 ? "avert" : ""} />
             <Compteur valeur={"🔴 " + s.actes.critiques} libelle="Délai final dépassé" niveau={Number(s.actes.critiques) > 0 ? "alerte" : ""} />
           </div>
 
           {s.finances && (
-          <Bloc titre="Suivi financier (FCFA) — tous dossiers confondus — visible par le Notaire uniquement" lien="/actes?vue=registre">
+          <Bloc titre="Suivi financier (FCFA) — tous dossiers confondus — visible par le Notaire et le Comptable" lien="/actes?vue=registre">
             <table className="registre">
               <tbody>
-                <tr><td>Total des honoraires (tous dossiers)</td><td className="montant">{formatFcfa(s.finances.honoraires_totaux)}</td></tr>
-                <tr><td>Total des honoraires réglés</td><td className="montant">{formatFcfa(s.finances.honoraires_regles)}</td></tr>
-                <tr><td>Total des honoraires restant à payer</td><td className="montant" style={{ fontWeight: 700 }}>{formatFcfa(s.finances.reste_a_payer)}</td></tr>
-                <tr><td>Total des valeurs des actes</td><td className="montant">{formatFcfa(s.finances.valeur_totale)}</td></tr>
-                <tr className="zoom"><td>— Zoom : honoraires des seuls dossiers en cours</td><td className="montant">{formatFcfa(s.finances.zoom_honoraires_en_cours)}</td></tr>
-                <tr className="zoom"><td>— Zoom : valeur des seuls actes en cours</td><td className="montant">{formatFcfa(s.finances.zoom_valeur_en_cours)}</td></tr>
+                <tr><td>Total des honoraires (tous dossiers)</td><td className="montant">{formatFcfa(s.finances?.honoraires_totaux)}</td></tr>
+                <tr><td>Total des honoraires réglés</td><td className="montant">{formatFcfa(s.finances?.honoraires_regles)}</td></tr>
+                <tr><td>Total des honoraires restant à payer</td><td className="montant" style={{ fontWeight: 700 }}>{formatFcfa(s.finances?.reste_a_payer)}</td></tr>
+                <tr><td>Total des valeurs des actes</td><td className="montant">{formatFcfa(s.finances?.valeur_totale)}</td></tr>
+                <tr className="zoom"><td>— Zoom : honoraires des seuls dossiers en cours</td><td className="montant">{formatFcfa(s.finances?.zoom_honoraires_en_cours)}</td></tr>
+                <tr className="zoom"><td>— Zoom : valeur des seuls actes en cours</td><td className="montant">{formatFcfa(s.finances?.zoom_valeur_en_cours)}</td></tr>
               </tbody>
             </table>
           </Bloc>
@@ -170,11 +170,11 @@ export default function TableauDeBord() {
           {/* ======== ② APPELS ======== */}
           <div className="bandeau-section" style={{ marginTop: 22 }}>② JOURNAL DES APPELS ET COURRIERS</div>
           <div className="compteurs">
-            <Compteur valeur={s.appels.total} libelle="Total entrées" />
-            <Compteur valeur={s.appels.resolus} libelle="Résolus" />
+            <Compteur valeur={s.appels?.total} libelle="Total entrées" />
+            <Compteur valeur={s.appels?.resolus} libelle="Résolus" />
             <Compteur valeur={s.appels.en_cours} libelle="En cours" />
             <Compteur valeur={s.appels.en_attente} libelle="En attente du Clerc" />
-            <Compteur valeur={"⚠ " + s.appels.tentatives_3plus} libelle="Tentatives ≥ 3" niveau={Number(s.appels.tentatives_3plus) > 0 ? "avert" : ""} />
+            <Compteur valeur={"⚠ " + s.appels?.tentatives_3plus} libelle="Tentatives ≥ 3" niveau={Number(s.appels?.tentatives_3plus) > 0 ? "avert" : ""} />
             <Compteur valeur={"🚨 " + s.appels.urgents} libelle="Alertes 🚨 (> 5 j)" niveau={Number(s.appels.urgents) > 0 ? "alerte" : ""} />
           </div>
 

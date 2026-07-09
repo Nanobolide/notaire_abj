@@ -24,8 +24,15 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   echecs_connexion INTEGER NOT NULL DEFAULT 0,
   verrouille_jusqua TEXT,
   derniere_activite TEXT,
+  nom_complet TEXT,
+  niveau_acces TEXT NOT NULL DEFAULT 'standard'
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard')),
+  mfa_active INTEGER NOT NULL DEFAULT 0,
+  mfa_method TEXT NOT NULL DEFAULT 'totp',
+  mfa_secret TEXT,
+  mfa_backup_codes TEXT,
   cree_le TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (etude_id, identifiant)
+  UNIQUE (identifiant)
 );
 
 CREATE TABLE IF NOT EXISTS appels_courriers (
@@ -160,4 +167,110 @@ CREATE TABLE IF NOT EXISTS demandes_recuperation (
   code_confirmation TEXT NOT NULL,
   traite_le TEXT,
   statut TEXT NOT NULL DEFAULT 'en_attente'
+);
+
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  etude_id TEXT,
+  utilisateur TEXT,
+  type_evenement TEXT NOT NULL,
+  severite TEXT NOT NULL DEFAULT 'info',
+  details TEXT,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_etude ON security_events(etude_id, cree_le);
+
+CREATE TABLE IF NOT EXISTS saas_plans (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  nom TEXT NOT NULL,
+  prix_mensuel INTEGER NOT NULL DEFAULT 0,
+  prix_annuel INTEGER NOT NULL DEFAULT 0,
+  max_utilisateurs INTEGER NOT NULL DEFAULT 10,
+  max_stockage_go INTEGER NOT NULL DEFAULT 10,
+  actif INTEGER NOT NULL DEFAULT 1,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_tenants (
+  id TEXT PRIMARY KEY,
+  etude_id TEXT UNIQUE REFERENCES etudes(id) ON DELETE CASCADE,
+  nom_tenant TEXT NOT NULL,
+  contact_nom TEXT,
+  contact_email TEXT,
+  statut TEXT NOT NULL DEFAULT 'actif',
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_subscriptions (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  plan_id TEXT NOT NULL REFERENCES saas_plans(id),
+  date_debut TEXT NOT NULL DEFAULT (date('now')),
+  date_fin TEXT,
+  periodicite TEXT NOT NULL DEFAULT 'mensuel',
+  statut TEXT NOT NULL DEFAULT 'active',
+  montant INTEGER NOT NULL DEFAULT 0,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_licenses (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  cle_licence TEXT NOT NULL UNIQUE,
+  quota_utilisateurs INTEGER NOT NULL DEFAULT 10,
+  quota_stockage_go INTEGER NOT NULL DEFAULT 10,
+  expire_le TEXT,
+  statut TEXT NOT NULL DEFAULT 'active',
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_invoices (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  subscription_id TEXT REFERENCES saas_subscriptions(id) ON DELETE SET NULL,
+  reference TEXT NOT NULL UNIQUE,
+  montant INTEGER NOT NULL DEFAULT 0,
+  devise TEXT NOT NULL DEFAULT 'XOF',
+  statut TEXT NOT NULL DEFAULT 'en_attente',
+  emission_le TEXT NOT NULL DEFAULT (date('now')),
+  echeance_le TEXT,
+  payee_le TEXT,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_support_tickets (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT REFERENCES saas_tenants(id) ON DELETE SET NULL,
+  sujet TEXT NOT NULL,
+  description TEXT NOT NULL,
+  priorite TEXT NOT NULL DEFAULT 'normale',
+  statut TEXT NOT NULL DEFAULT 'ouvert',
+  cree_par TEXT REFERENCES utilisateurs(id),
+  assigne_a TEXT REFERENCES utilisateurs(id),
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS saas_notifications (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT REFERENCES saas_tenants(id) ON DELETE CASCADE,
+  canal TEXT NOT NULL DEFAULT 'in_app',
+  cible TEXT,
+  sujet TEXT,
+  message TEXT NOT NULL,
+  statut TEXT NOT NULL DEFAULT 'queued',
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  envoye_le TEXT
+);
+
+CREATE TABLE IF NOT EXISTS saas_global_settings (
+  cle TEXT PRIMARY KEY,
+  valeur TEXT NOT NULL,
+  modifie_le TEXT NOT NULL DEFAULT (datetime('now')),
+  modifie_par TEXT REFERENCES utilisateurs(id)
 );

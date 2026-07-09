@@ -33,6 +33,7 @@ function Actes() {
   const [meta, setMeta] = useState({ total: 0, pages: 1 });
   const [erreur, setErreur] = useState("");
   const [admin, setAdmin] = useState(false);
+  const [voitArgent, setVoitArgent] = useState(false);
   const [param, setParam] = useState(null);
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
@@ -50,7 +51,11 @@ function Actes() {
   useEffect(() => { fetch("/api/referentiels").then((r) => r.json()).then(setRefs); }, []);
   useEffect(() => { fetch("/api/parametres").then((r) => r.json()).then((d) => !d.erreur && setParam(d)); }, []);
   useEffect(() => { fetch("/api/session").then((r) => r.json())
-    .then((d) => setAdmin(d.role === "admin_etude" || d.role === "super_admin")); }, []);
+    .then((d) => {
+      const n = d.niveauAcces || (d.role === "admin_etude" ? "administrateur" : "standard");
+      setAdmin(n === "administrateur" || d.role === "super_admin");
+      setVoitArgent(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.role === "super_admin");
+    }); }, []);
   useEffect(() => { charger(); }, [charger]);
 
   const maj = (ch) => (e) => setForm({ ...form, [ch]: e.target.value });
@@ -199,7 +204,7 @@ function Actes() {
             <div style={{ alignSelf: "end" }}>
               <button type="button" className="bouton secondaire" onClick={ajouterPartie}>+ Ajouter une partie</button>
             </div>
-            {admin && (<>
+            {voitArgent && (<>
             <label>Valeur de l'acte (FCFA)<input type="number" min="0" value={form.valeur_acte} onChange={maj("valeur_acte")} /></label>
             <label>Honoraires totaux (FCFA)<input type="number" min="0" value={form.honoraires_totaux} onChange={maj("honoraires_totaux")} /></label>
             <label>Montant réglé (FCFA)<input type="number" min="0" value={form.montant_regle} onChange={maj("montant_regle")} /></label>
@@ -301,7 +306,7 @@ function Actes() {
             <tr>
               <th>N° minute</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
               <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Délai (j)</th>
-              <th>Échéance ?</th>{admin && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
+              <th>Échéance ?</th>{voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -333,7 +338,7 @@ function Actes() {
                   </td>
                   <td>{fini ? a.progression : joursEcoules(a.date_ouverture, a.termine_le)}</td>
                   <td>{respectEcheance(a)}</td>
-                  {admin && (<>
+                  {voitArgent && (<>
                   <td>{formatFcfa(a.honoraires_totaux)}</td>
                   <td style={{ fontWeight: 600 }}>{formatFcfa(resteAPayer(a))}</td>
                   </>)}

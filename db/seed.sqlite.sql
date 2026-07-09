@@ -15,6 +15,9 @@ VALUES
 ('u0000003-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','clerc1','Clerc 1','Clerc 1','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',1),
 ('u0000004-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','accueil','Accueil','Accueil','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',1);
 
+INSERT OR IGNORE INTO utilisateurs (id, etude_id, role, identifiant, nom_affiche, fonction, email_rattachement, hash_mot_de_passe, doit_changer_mdp, niveau_acces)
+VALUES ('u0000005-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','super_admin','superadmin','Super Administrateur','Direction Produit','support@notaria.ci','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',1,'administrateur');
+
 INSERT OR IGNORE INTO referentiels (id, etude_id, type_liste, valeur, ordre) VALUES
 ('r001','11111111-1111-1111-1111-111111111111','type_flux','Appel Téléphonique',1),
 ('r002','11111111-1111-1111-1111-111111111111','type_flux','Courrier Physique',2),

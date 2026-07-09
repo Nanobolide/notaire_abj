@@ -9,7 +9,7 @@ export async function GET(req, { params }) {
       (await c.query(
         `SELECT p.texte, p.horodatage, u.nom_affiche AS auteur
          FROM pieces_log p LEFT JOIN utilisateurs u ON u.id = p.auteur
-         WHERE p.acte_id = $1 ORDER BY p.horodatage ASC`, [params.id])).rows);
+         WHERE p.acte_id = $1 AND p.etude_id = $2 ORDER BY p.horodatage ASC`, [params.id, s.etudeId])).rows);
     return NextResponse.json(rows);
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
@@ -21,11 +21,15 @@ export async function POST(req, { params }) {
     const { texte } = await req.json();
     if (!texte?.trim())
       return NextResponse.json({ erreur: "Le texte de l'entrée est vide." }, { status: 400 });
-    const ligne = await withTenant(s.etudeId, async (c) =>
-      (await c.query(
+    const ligne = await withTenant(s.etudeId, async (c) => {
+      const { rows: acteRows } = await c.query(
+        `SELECT id FROM actes WHERE id = $1 AND etude_id = $2`, [params.id, s.etudeId]);
+      if (!acteRows[0]) { const e = new Error("Acte introuvable"); e.status = 404; throw e; }
+      return (await c.query(
         `INSERT INTO pieces_log (etude_id, acte_id, texte, auteur)
          VALUES ($1,$2,$3,$4) RETURNING texte, horodatage`,
-        [s.etudeId, params.id, texte.trim(), s.uid])).rows[0]);
+        [s.etudeId, params.id, texte.trim(), s.uid])).rows[0];
+    });
     return NextResponse.json(ligne, { status: 201 });
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }

@@ -11,7 +11,7 @@ export async function PATCH(req, { params }) {
     const d = await req.json();
     const ligne = await withTenant(s.etudeId, async (c) => {
       const { rows: avantRows } = await c.query(
-        `SELECT * FROM appels_courriers WHERE id = $1 AND supprime_le IS NULL`, [params.id]);
+        `SELECT * FROM appels_courriers WHERE id = $1 AND etude_id = $2 AND supprime_le IS NULL`, [params.id, s.etudeId]);
       if (!avantRows[0]) { const e = new Error("Entrée introuvable"); e.status = 404; throw e; }
       const sets = []; const vals = [];
       for (const ch of CHAMPS) if (ch in d) { vals.push(d[ch]); sets.push(`${ch} = $${vals.length}`); }
@@ -20,8 +20,10 @@ export async function PATCH(req, { params }) {
       if (d.statut_traitement && d.statut_traitement !== "Résolu") sets.push("resolu_le = NULL");
       sets.push("modifie_le = now()");
       vals.push(params.id);
+      const idPos = vals.length;
+      vals.push(s.etudeId);
       const { rows } = await c.query(
-        `UPDATE appels_courriers SET ${sets.join(", ")} WHERE id = $${vals.length} RETURNING *`, vals);
+        `UPDATE appels_courriers SET ${sets.join(", ")} WHERE id = $${idPos} AND etude_id = $${vals.length} RETURNING *`, vals);
       await audit(c, { etudeId: s.etudeId, table: "appels_courriers", ligneId: params.id,
         action: "modification", avant: avantRows[0], apres: rows[0], utilisateur: s.uid });
       return rows[0];
@@ -36,8 +38,8 @@ export async function DELETE(req, { params }) {
     const s = await exigerAdmin();
     await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(
-        `UPDATE appels_courriers SET supprime_le = now() WHERE id = $1 AND supprime_le IS NULL RETURNING *`,
-        [params.id]);
+        `UPDATE appels_courriers SET supprime_le = now() WHERE id = $1 AND etude_id = $2 AND supprime_le IS NULL RETURNING *`,
+        [params.id, s.etudeId]);
       if (!rows[0]) { const e = new Error("Entrée introuvable"); e.status = 404; throw e; }
       await audit(c, { etudeId: s.etudeId, table: "appels_courriers", ligneId: params.id,
         action: "suppression", avant: rows[0], utilisateur: s.uid });
