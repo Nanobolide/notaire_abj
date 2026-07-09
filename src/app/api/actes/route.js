@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { exigerSession, estAdmin } from "@/lib/auth";
-
-/** C2 — le volet financier ne sort JAMAIS vers un collaborateur, quelle que soit la route. */
-export function filtrerActe(row, s) {
-  if (estAdmin(s) || !row) return row;
-  const { valeur_acte, honoraires_totaux, montant_regle, statut_paiement, ...reste } = row;
-  return reste;
-}
-import { withTenant, audit } from "@/lib/db";
+import { exigerSession } from "@/lib/auth";
+import { voitRegistreActes, filtrerActe, voitMontants } from "@/lib/acces";
+import { withTenant, audit, newId } from "@/lib/db";
+import { isPg, now, sqlPartiesSubquery, sqlActesInsert, sqlPartiesInsert } from "@/lib/dialect";
 
 export async function GET(req) {
   try {
     const s = await exigerSession();
+    if (!voitRegistreActes(s)) {
+      const e = new Error("L'Accueil n'a pas accès au registre des actes."); e.status = 403; throw e;
+    }
     const p = new URL(req.url).searchParams;
     const page = Math.max(1, parseInt(p.get("page") || "1", 10));
     const parPage = 50;
@@ -29,18 +27,13 @@ export async function GET(req) {
       const total = Number((await c.query(
         `SELECT count(*) FROM actes a WHERE a.supprime_le IS NULL ${where}`, valeurs)).rows[0].count);
       const rows = (await c.query(
-        `SELECT a.*,
-                COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-                          FROM acte_parties p WHERE p.acte_id = a.id), '') AS parties
+        `SELECT a.*, ${sqlPartiesSubquery("a")} AS parties
          FROM actes a WHERE a.supprime_le IS NULL ${where}
          ORDER BY a.date_ouverture DESC, a.cree_le DESC
          LIMIT ${parPage} OFFSET ${(page - 1) * parPage}`, valeurs)).rows;
       return { rows, total };
     });
-    const visibles = estAdmin(s) ? rows : rows.map((r) => {
-      const { valeur_acte, honoraires_totaux, montant_regle, statut_paiement, ...reste } = r;
-      return reste;
-    });
+    const visibles = rows.map((r) => filtrerActe(r, s));  // C10 — matrice appliquée côté serveur
     return NextResponse.json({ lignes: visibles, total, page, pages: Math.ceil(total / parPage) || 1 });
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
@@ -50,8 +43,11 @@ export async function POST(req) {
   try {
     const s = await exigerSession(); s2 = s;
     const d = await req.json();
-    if (!estAdmin(s))
-      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
+    // C10 — un collaborateur ne peut pas injecter de montants à la création.
+    if (!voitMontants(s))
+      for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement",
+                        "emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
+                        "prestations_annexes"]) delete d[ch];
     if (!d.numero_minute)
       return NextResponse.json({ erreur: "Le N° de minute est obligatoire." }, { status: 400 });
     if (Number(d.montant_regle || 0) > Number(d.honoraires_totaux || 0))
@@ -60,10 +56,13 @@ export async function POST(req) {
       return NextResponse.json({ erreur: "L'échéance ne peut pas précéder la date d'ouverture." }, { status: 400 });
     // Alerte anti-doublon : sauf si l'utilisateur a confirmé (forcer=true)
     if (!d.forcer) {
+      const recent = isPg()
+        ? `cree_le > ${now()} - interval '5 minutes'`
+        : `cree_le > datetime('now', '-5 minutes')`;
       const doublon = await withTenant(s.etudeId, async (c) =>
         (await c.query(
           `SELECT numero_minute FROM actes WHERE supprime_le IS NULL
-             AND (numero_minute = $1 OR (nature_acte = $2 AND cree_le > now() - interval '5 minutes'))
+             AND (numero_minute = $1 OR (nature_acte = $2 AND ${recent}))
            LIMIT 1`, [d.numero_minute, d.nature_acte || null])).rows[0]);
       if (doublon)
         return NextResponse.json({ doublon: true,
@@ -77,28 +76,25 @@ export async function POST(req) {
       d.date_echeance = base.toISOString().slice(0, 10);
     }
     const ligne = await withTenant(s.etudeId, async (c) => {
-      const { rows } = await c.query(
-        `INSERT INTO actes (etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
-           nature_acte, complexite, responsable, conservation_fonciere, progression,
-           valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
-         VALUES ($1,$2,$3, COALESCE($4::date, CURRENT_DATE),
-                 COALESCE($5::date, CURRENT_DATE + 30),          -- échéance (calculée selon le barème en amont)
-                 $6,$7,$8,$9, COALESCE($10,'Rédaction'),
-                 COALESCE($11,0),COALESCE($12,0),COALESCE($13,0),
-                 COALESCE($14,'En attente'), $15, $16, $17)
-         RETURNING *`,
-        [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
-         d.date_echeance || null, d.nature_acte || null, d.complexite || null,
-         d.responsable || null, d.conservation_fonciere || null, d.progression,
-         d.valeur_acte, d.honoraires_totaux, d.montant_regle, d.statut_paiement,
-         d.difficultes || null, d.observations || null, s.uid]);
+      const params = isPg()
+        ? [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
+           d.date_echeance || null, d.nature_acte || null, d.complexite || null,
+           d.responsable || null, d.conservation_fonciere || null, d.progression,
+           d.valeur_acte, d.honoraires_totaux, d.montant_regle, d.statut_paiement,
+           d.difficultes || null, d.observations || null, s.uid]
+        : [newId(), s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
+           d.date_echeance || null, d.nature_acte || null, d.complexite || null,
+           d.responsable || null, d.conservation_fonciere || null, d.progression,
+           d.valeur_acte, d.honoraires_totaux, d.montant_regle, d.statut_paiement,
+           d.difficultes || null, d.observations || null, s.uid];
+      const { rows } = await c.query(sqlActesInsert(), params);
       const acte = rows[0];
-      // Parties multiples (Partie 1, 2, 3...)
       const parties = Array.isArray(d.parties) ? d.parties.filter(Boolean) : [];
       for (let i = 0; i < parties.length; i++) {
-        await c.query(
-          `INSERT INTO acte_parties (etude_id, acte_id, ordre, nom_partie) VALUES ($1,$2,$3,$4)`,
-          [s.etudeId, acte.id, i + 1, parties[i]]);
+        const pParams = isPg()
+          ? [s.etudeId, acte.id, i + 1, parties[i]]
+          : [newId(), s.etudeId, acte.id, i + 1, parties[i]];
+        await c.query(sqlPartiesInsert(), pParams);
       }
       await audit(c, { etudeId: s.etudeId, table: "actes", ligneId: acte.id,
         action: "creation", apres: acte, utilisateur: s.uid });

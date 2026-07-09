@@ -33,6 +33,7 @@ function Actes() {
   const [meta, setMeta] = useState({ total: 0, pages: 1 });
   const [erreur, setErreur] = useState("");
   const [admin, setAdmin] = useState(false);
+  const [voitArgent, setVoitArgent] = useState(false);
   const [param, setParam] = useState(null);
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
@@ -50,7 +51,11 @@ function Actes() {
   useEffect(() => { fetch("/api/referentiels").then((r) => r.json()).then(setRefs); }, []);
   useEffect(() => { fetch("/api/parametres").then((r) => r.json()).then((d) => !d.erreur && setParam(d)); }, []);
   useEffect(() => { fetch("/api/session").then((r) => r.json())
-    .then((d) => setAdmin(d.role === "admin_etude" || d.role === "super_admin")); }, []);
+    .then((d) => {
+      const n = d.niveauAcces || (d.role === "admin_etude" ? "administrateur" : "standard");
+      setAdmin(n === "administrateur" || d.role === "super_admin");
+      setVoitArgent(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.role === "super_admin");
+    }); }, []);
   useEffect(() => { charger(); }, [charger]);
 
   const maj = (ch) => (e) => setForm({ ...form, [ch]: e.target.value });
@@ -299,9 +304,9 @@ function Actes() {
         <table className="registre">
           <thead>
             <tr>
-              <th>N° minute</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
+              <th>N° minute</th><th>N° dossier</th><th>Ouverture</th><th>Échéance</th><th>Nature</th><th>Parties</th>
               <th>Responsable</th><th>Conservation</th><th>Étape / Statut</th><th>Délai (j)</th>
-              <th>Échéance ?</th>{admin && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
+              {voitArgent && (<><th>Honoraires</th><th>Reste à payer</th></>)}<th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -319,7 +324,7 @@ function Actes() {
               const fini = a.progression === "Terminé" || a.progression === "Annulé";
               return (
                 <tr key={a.id} style={{ background: c.fond }}>
-                  <td>{a.numero_minute}</td>
+                  <td>{a.numero_minute}</td><td>{a.numero_dossier || "—"}</td>
                   <td>{new Date(a.date_ouverture).toLocaleDateString("fr-FR")}</td>
                   <td>{new Date(a.date_echeance).toLocaleDateString("fr-FR")}</td>
                   <td>{a.nature_acte || "—"}</td>
@@ -332,8 +337,7 @@ function Actes() {
                     </select>
                   </td>
                   <td>{fini ? a.progression : joursEcoules(a.date_ouverture, a.termine_le)}</td>
-                  <td>{respectEcheance(a)}</td>
-                  {admin && (<>
+                  {voitArgent && (<>
                   <td>{formatFcfa(a.honoraires_totaux)}</td>
                   <td style={{ fontWeight: 600 }}>{formatFcfa(resteAPayer(a))}</td>
                   </>)}

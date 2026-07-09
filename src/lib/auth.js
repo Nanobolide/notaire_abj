@@ -8,14 +8,13 @@ const DUREE_SESSION = 60 * 30; // 30 min — postes partagés à l'accueil
 export function creerSession(user) {
   const token = jwt.sign(
     { uid: user.id, etudeId: user.etude_id, role: user.role, nom: user.nom_affiche,
-      etudeNom: user.etude_nom || null, fonction: user.fonction || null, doitChangerMdp: !!user.doit_changer_mdp },
+      etudeNom: user.etude_nom || null, fonction: user.fonction || null,
+        niveauAcces: user.niveau_acces || (user.role === 'admin_etude' ? 'administrateur' : 'standard'),
+        doitChangerMdp: !!user.doit_changer_mdp },
     process.env.JWT_SECRET,
     { expiresIn: DUREE_SESSION }
   );
-  cookies().set(COOKIE, token, {
-    httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION,
-    secure: process.env.NODE_ENV === "production",
-  });
+  cookies().set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION });
 }
 
 export function fermerSession() {
@@ -44,14 +43,32 @@ export async function exigerSession(permettreMdpProvisoire = false) {
   return s;
 }
 
-export async function exigerAdmin() {
+/**
+ * C9 — L'autorisation se fonde sur niveau_acces, JAMAIS sur role.
+ * exigerNotaire() : Administrateur + Notaire salarié (lecture/écriture métier complète).
+ */
+export async function exigerNotaire() {
   const s = await exigerSession();
-  if (s.role !== "admin_etude" && s.role !== "super_admin") {
-    const e = new Error("Réservé à l'Administrateur d'étude"); e.status = 403; throw e;
+  const n = s.niveauAcces || (s.role === "admin_etude" ? "administrateur" : "standard");
+  if (s.role !== "super_admin" && !["administrateur", "notaire_salarie"].includes(n)) {
+    const e = new Error("Réservé au Notaire de l'étude"); e.status = 403; throw e;
   }
   return s;
 }
 
-export function estAdmin(s) {
-  return s && (s.role === "admin_etude" || s.role === "super_admin");
+/** exigerAdmin() : Administrateur SEUL (comptes, paramètres, suppression, démo). */
+export async function exigerAdmin() {
+  const s = await exigerSession();
+  const n = s.niveauAcces || (s.role === "admin_etude" ? "administrateur" : "standard");
+  if (s.role !== "super_admin" && n !== "administrateur") {
+    const e = new Error("Réservé à l'Administrateur de l'étude"); e.status = 403; throw e;
+  }
+  return s;
 }
+
+/**
+ * I9 — SUPPRIMÉ. estAdmin() se fondait sur `role` et a causé la faille C9
+ * (le Notaire salarié, de role 'admin_etude', obtenait les droits d'Administrateur).
+ * L'autorisation passe désormais EXCLUSIVEMENT par src/lib/acces.js, qui lit `niveau_acces`.
+ * N'introduisez pas de nouveau contrôle fondé sur `role`.
+ */

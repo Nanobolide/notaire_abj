@@ -47,6 +47,9 @@ async function migratePg() {
   }
 
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
+  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
+  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
+  await client.query(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND niveau_acces = 'standard'`);
 
   // Mot de passe démo pour les comptes seed (test à distance Render)
   const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
@@ -81,6 +84,10 @@ async function migrateSqliteAsync() {
     db.exec(fs.readFileSync(path.join(ROOT, file), "utf8"));
   }
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN derniere_activite TEXT"); } catch {}
+  try { db.exec("ALTER TABLE utilisateurs ADD COLUMN nom_complet TEXT"); } catch {}
+  try { db.exec("ALTER TABLE utilisateurs ADD COLUMN niveau_acces TEXT NOT NULL DEFAULT 'standard'"); } catch {}
+  db.prepare(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND (niveau_acces IS NULL OR niveau_acces = 'standard')`).run();
+  db.prepare(`UPDATE utilisateurs SET niveau_acces = 'standard' WHERE niveau_acces IS NULL`).run();
   const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
   db.prepare(
     `UPDATE utilisateurs SET hash_mot_de_passe = ?

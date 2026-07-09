@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { exigerSession, exigerAdmin } from "@/lib/auth";
+import { modifieTva, gereParametres } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
-import { isPg, now } from "@/lib/dialect";
 
 const DEFAUTS = {
   conservation_annees: 10, session_minutes: 30,
@@ -15,11 +15,7 @@ const DEFAUTS = {
 async function lire(c, etudeId) {
   let { rows } = await c.query(`SELECT * FROM parametres_etude WHERE etude_id = $1`, [etudeId]);
   if (!rows[0]) {
-    if (isPg()) {
-      await c.query(`INSERT INTO parametres_etude (etude_id) VALUES ($1) ON CONFLICT DO NOTHING`, [etudeId]);
-    } else {
-      await c.query(`INSERT OR IGNORE INTO parametres_etude (etude_id) VALUES ($1)`, [etudeId]);
-    }
+    await c.query(`INSERT INTO parametres_etude (etude_id) VALUES ($1) ON CONFLICT DO NOTHING`, [etudeId]);
     rows = (await c.query(`SELECT * FROM parametres_etude WHERE etude_id = $1`, [etudeId])).rows;
   }
   return rows[0];
@@ -37,8 +33,17 @@ export async function GET() {
 /** Mise à jour (Notaire). Envoyer {reinitialiser:true} pour rétablir les valeurs par défaut. */
 export async function PATCH(req) {
   try {
-    const s = await exigerAdmin();
+    // C13 — deux droits distincts : le taux de TVA (Notaire + Comptable) et le reste (Administrateur).
+    const s = await exigerSession();
     const d = await req.json();
+    const champsDemandes = Object.keys(d).filter((k) => k !== "reinitialiser");
+    const tvaSeule = champsDemandes.length > 0 && champsDemandes.every((k) => k === "taux_tva");
+    if (tvaSeule) {
+      if (!modifieTva(s))
+        return NextResponse.json({ erreur: "Seuls le Notaire et le Comptable peuvent modifier le taux de TVA." }, { status: 403 });
+    } else if (!gereParametres(s)) {
+      return NextResponse.json({ erreur: "Réservé à l'Administrateur de l'étude." }, { status: 403 });
+    }
     const source = d.reinitialiser ? DEFAUTS : d;
     // Validation : seuils strictement croissants et positifs
     const groupes = [["acte_simple_s1","acte_simple_s2","acte_simple_s3"],
@@ -65,7 +70,7 @@ export async function PATCH(req) {
       await lire(c, s.etudeId); // garantit l'existence de la ligne
       if (champs.length) {
         const sets = champs.map((k, i) => `${k} = $${i + 2}`).join(", ");
-        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = ${now()} WHERE etude_id = $1`,
+        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = now() WHERE etude_id = $1`,
           [s.etudeId, ...champs.map((k) => source[k])]);
       }
       await audit(c, { etudeId: s.etudeId, table: "parametres_etude", action: "modification",

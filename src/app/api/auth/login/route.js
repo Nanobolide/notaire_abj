@@ -4,6 +4,12 @@ import db from "@/lib/db";
 import { creerSession } from "@/lib/auth";
 import { isPg, actifClause, lockAccountSql } from "@/lib/dialect";
 
+const selectUser = `SELECT u.id, u.etude_id, u.role, u.nom_affiche, u.fonction, u.niveau_acces,
+        u.hash_mot_de_passe, u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua,
+        e.statut AS etude_statut, e.nom AS etude_nom
+ FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+ WHERE u.identifiant = $1 AND ${actifClause("u")}`;
+
 export async function POST(req) {
   try {
     const { identifiant, motDePasse } = await req.json();
@@ -16,25 +22,11 @@ export async function POST(req) {
         const { rows } = await db.query(`SELECT * FROM auth_lookup($1)`, [identifiant]);
         user = rows[0];
       } catch {
-        const { rows } = await db.query(
-          `SELECT u.id, u.etude_id, u.role, u.nom_affiche, u.fonction, u.hash_mot_de_passe,
-                  u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua,
-                  e.statut AS etude_statut, e.nom AS etude_nom
-           FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
-           WHERE u.identifiant = $1 AND ${actifClause("u")}`,
-          [identifiant]
-        );
+        const { rows } = await db.query(selectUser, [identifiant]);
         user = rows[0];
       }
     } else {
-      const { rows } = await db.query(
-        `SELECT u.id, u.etude_id, u.role, u.nom_affiche, u.fonction, u.hash_mot_de_passe,
-                u.doit_changer_mdp, u.echecs_connexion, u.verrouille_jusqua,
-                e.statut AS etude_statut, e.nom AS etude_nom
-         FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
-         WHERE u.identifiant = $1 AND ${actifClause("u")}`,
-        [identifiant]
-      );
+      const { rows } = await db.query(selectUser, [identifiant]);
       user = rows[0];
     }
 
@@ -87,7 +79,7 @@ export async function POST(req) {
     const bd = /connect|password|database|ECONNREFUSED|ENOTFOUND/i.test(e.message);
     return NextResponse.json({
       erreur: bd
-        ? "Base de données injoignable. En local : lancez « npm run db:migrate » puis « npm run dev »."
+        ? "Base de données injoignable. En local : lancez « npm run dev » (migration automatique) ou « npm run db:migrate »."
         : "Erreur du serveur : " + e.message
     }, { status: 500 });
   }

@@ -22,7 +22,8 @@ export function cnt(cond) {
 export const EN_COURS = `progression NOT IN ('Terminé','Annulé')`;
 
 export function actifClause(alias = "u") {
-  return isPg() ? `${alias}.actif = true` : `${alias}.actif = 1`;
+  const col = alias ? `${alias}.actif` : "actif";
+  return isPg() ? `${col} = true` : `${col} = 1`;
 }
 
 export function actifFalse() {
@@ -69,6 +70,16 @@ export function sqlAppelsInsert() {
            COALESCE($5, date('now')), COALESCE($6, time('now')),
            $7,$8,$9,$10,$11,$12,$13,COALESCE($14,'Non commencé'),COALESCE($15,0),$16,$17)
    RETURNING *`;
+}
+
+export function sqlPartiesSubquery(alias = "a") {
+  return isPg()
+    ? `COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
+                FROM acte_parties p WHERE p.acte_id = ${alias}.id AND p.etude_id = ${alias}.etude_id), '')`
+    : `COALESCE((SELECT group_concat(nom_partie, ' / ')
+                FROM (SELECT nom_partie FROM acte_parties
+                      WHERE acte_id = ${alias}.id AND etude_id = ${alias}.etude_id
+                      ORDER BY ordre)), '')`;
 }
 
 export function sqlActesList() {

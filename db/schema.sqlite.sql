@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   echecs_connexion INTEGER NOT NULL DEFAULT 0,
   verrouille_jusqua TEXT,
   derniere_activite TEXT,
+  nom_complet TEXT,
+  niveau_acces TEXT NOT NULL DEFAULT 'standard'
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard')),
   cree_le TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (etude_id, identifiant)
 );
