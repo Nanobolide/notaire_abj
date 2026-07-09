@@ -90,17 +90,7 @@ export function sqlPartiesSubquery(alias = "a") {
 }
 
 export function sqlActesList() {
-  if (isPg()) {
-    return `SELECT a.*,
-            COALESCE((SELECT string_agg(p.nom_partie, ' / ' ORDER BY p.ordre)
-                      FROM acte_parties p WHERE p.acte_id = a.id AND p.etude_id = a.etude_id), '') AS parties
-     FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL`;
-  }
-  return `SELECT a.*,
-          COALESCE((SELECT group_concat(p.nom_partie, ' / ')
-                    FROM (SELECT nom_partie FROM acte_parties p
-                          WHERE p.acte_id = a.id AND p.etude_id = a.etude_id
-                          ORDER BY p.ordre)), '') AS parties
+  return `SELECT a.*, ${sqlPartiesSubquery("a")} AS parties
    FROM actes a WHERE a.etude_id = $1 AND a.supprime_le IS NULL`;
 }
 
