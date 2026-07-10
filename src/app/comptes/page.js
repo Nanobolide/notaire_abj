@@ -10,10 +10,10 @@ const FONCTIONS = [
 ];
 
 const NIVEAUX = [
-  { v: "administrateur", t: "Administrateur — tous les droits" },
-  { v: "notaire_salarie", t: "Notaire salarié — tout sauf comptes et paramètres" },
-  { v: "comptable", t: "Comptable — financier, sans le contenu des dossiers" },
-  { v: "standard", t: "Standard — registres, aucun montant" },
+  { v: "administrateur",  t: "Administrateur",  d: "Tous les droits, y compris supprimer un compte", couleur: "#1F3864", fond: "#EAEEF6" },
+  { v: "notaire_salarie", t: "Notaire salarié", d: "Tout, sauf les comptes et les paramètres", couleur: "#2E7D32", fond: "#EDF3EE" },
+  { v: "comptable",       t: "Comptable",       d: "Comme un rédacteur, plus le volet financier", couleur: "#8A6D1F", fond: "#FBF6E9" },
+  { v: "standard",        t: "Standard",        d: "Les registres, aucun montant", couleur: "#5A6478", fond: "#F4F5F8" },
 ];
 
 const NIVEAU_SUGGERE = {
@@ -22,9 +22,10 @@ const NIVEAU_SUGGERE = {
   "Comptable": "comptable",
 };
 
-const VIDE = { identifiant: "", nom_affiche: "", nom_complet: "", fonction: "Clerc de 1ère catégorie",
-  niveau_acces: "standard", motDePasseProvisoire: "" };
+const VIDE = { identifiant: "", nom_complet: "", fonction: "Clerc de 1ère catégorie",
+               niveau_acces: "standard", motDePasseProvisoire: "" };
 
+/** Mot de passe provisoire lisible : 10 caractères, sans O/0/l/1 ambigus. */
 function genererMotDePasse() {
   const lettres = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
   const chiffres = "23456789";
@@ -35,25 +36,40 @@ function genererMotDePasse() {
   return mdp.split("").sort(() => Math.random() - 0.5).join("");
 }
 
-function ChampMdp({ valeur, onChange, requis }) {
+function ChampMdp({ valeur, onChange }) {
   const [visible, setVisible] = useState(false);
   return (
     <div style={{ position: "relative" }}>
       <input type={visible ? "text" : "password"} value={valeur} onChange={onChange}
-             required={requis} style={{ paddingRight: 34, width: "100%" }} />
+             required style={{ paddingRight: 34, width: "100%" }} />
       <button type="button" onClick={() => setVisible(!visible)} title={visible ? "Masquer" : "Afficher"}
         style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)",
-          background: "none", border: "none", cursor: "pointer", fontSize: 15, padding: "2px 5px" }}>
+                 background: "none", border: "none", cursor: "pointer", fontSize: 15, padding: "2px 5px" }}>
         {visible ? "🙈" : "👁"}
       </button>
     </div>
   );
 }
 
+const Badge = ({ niveau }) => {
+  const n = NIVEAUX.find((x) => x.v === niveau) || NIVEAUX[3];
+  return <span style={{ fontSize: 10.5, fontWeight: 500, padding: "3px 9px", borderRadius: 10,
+                        background: n.fond, color: n.couleur, whiteSpace: "nowrap" }}>{n.t}</span>;
+};
+
+const Etat = ({ u }) => {
+  if (!u.actif) return <span style={{ color: "#7A5AA0" }}>⏸ Désactivé</span>;
+  if (u.verrouille) return <span style={{ color: "#B03030" }}>🔒 Verrouillé</span>;
+  if (u.doit_changer_mdp) return <span style={{ color: "#8A6D1F" }}>⏳ Mot de passe provisoire</span>;
+  return <span style={{ color: "#2E7D32" }}>● Actif</span>;
+};
+
 export default function Comptes() {
   const [lignes, setLignes] = useState([]);
   const [form, setForm] = useState(VIDE);
-  const [enEdition, setEnEdition] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [edition, setEdition] = useState(null);      // id de la ligne en cours de modification
+  const [brouillon, setBrouillon] = useState({});    // valeurs de la ligne éditée
   const [erreur, setErreur] = useState("");
   const [info, setInfo] = useState("");
   const [mdpAffiche, setMdpAffiche] = useState(null);
@@ -64,14 +80,13 @@ export default function Comptes() {
 
   const maj = (ch) => (e) => {
     const v = e.target.value;
-    if (ch === "fonction" && NIVEAU_SUGGERE[v] && !enEdition)
-      setForm({ ...form, fonction: v, niveau_acces: NIVEAU_SUGGERE[v] });
+    if (ch === "fonction" && NIVEAU_SUGGERE[v]) setForm({ ...form, fonction: v, niveau_acces: NIVEAU_SUGGERE[v] });
     else setForm({ ...form, [ch]: v });
   };
 
   const generer = () => {
     setForm({ ...form, motDePasseProvisoire: genererMotDePasse() });
-    setInfo("Mot de passe généré. Il sera affiché une seule fois après la création.");
+    setInfo("Mot de passe généré. Il ne s'affichera qu'une seule fois après la création.");
   };
 
   const copier = async (txt) => {
@@ -82,31 +97,33 @@ export default function Comptes() {
   const creer = async () => {
     setErreur(""); setInfo("");
     const rep = await fetch("/api/comptes", { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, nom_affiche: form.identifiant, nom_complet: form.nom_complet }) });
     const d = await lireJson(rep);
     if (!rep.ok) { setErreur(d.erreur); return; }
     setMdpAffiche({ identifiant: form.identifiant, mdp: form.motDePasseProvisoire });
-    setForm(VIDE);
-    charger();
+    setForm(VIDE); setOuvert(false); charger();
   };
 
-  const enregistrerModif = async () => {
-    setErreur(""); setInfo("");
-    const rep = await fetch(`/api/comptes/${enEdition}`, { method: "PATCH",
+  /** Modification EN LIGNE, comme dans le registre des actes. */
+  const ouvrirEdition = (u) => {
+    setEdition(u.id); setErreur(""); setInfo("");
+    setBrouillon({ nom_affiche: u.identifiant, nom_complet: u.nom_complet || "",
+                   fonction: u.fonction || "Clerc de 1ère catégorie", niveau_acces: u.niveau_acces || "standard" });
+  };
+  const majBrouillon = (ch) => (e) => {
+    const v = e.target.value;
+    if (ch === "fonction" && NIVEAU_SUGGERE[v]) setBrouillon({ ...brouillon, fonction: v, niveau_acces: NIVEAU_SUGGERE[v] });
+    else setBrouillon({ ...brouillon, [ch]: v });
+  };
+  const enregistrer = async (id) => {
+    setErreur("");
+    const rep = await fetch(`/api/comptes/${id}`, { method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "modifier", nom_affiche: form.nom_affiche,
-        nom_complet: form.nom_complet, fonction: form.fonction, niveau_acces: form.niveau_acces }) });
+      body: JSON.stringify({ action: "modifier", ...brouillon }) });
     const d = await lireJson(rep);
     if (!rep.ok) { setErreur(d.erreur); return; }
-    setEnEdition(null); setForm(VIDE); setInfo("Compte modifié."); charger();
-  };
-
-  const modifier = (u) => {
-    setEnEdition(u.id);
-    setForm({ identifiant: u.identifiant, nom_affiche: u.nom_affiche || "", nom_complet: u.nom_complet || "",
-      fonction: u.fonction || "Clerc de 1ère catégorie", niveau_acces: u.niveau_acces || "standard",
-      motDePasseProvisoire: "" });
-    setErreur(""); setInfo("");
+    setEdition(null); setInfo("Compte modifié."); charger();
   };
 
   const action = async (id, act) => {
@@ -125,7 +142,7 @@ export default function Comptes() {
   };
 
   const supprimer = async (u) => {
-    if (!confirm(`Supprimer définitivement le compte « ${u.identifiant} » ? Action irréversible.`)) return;
+    if (!confirm(`Supprimer définitivement le compte « ${u.identifiant} » ?\n\nCette action est irréversible.`)) return;
     setErreur(""); setInfo("");
     const rep = await fetch(`/api/comptes/${u.id}`, { method: "DELETE" });
     const d = await lireJson(rep);
@@ -133,16 +150,13 @@ export default function Comptes() {
     setInfo("Compte supprimé."); charger();
   };
 
-  const libelleNiveau = (n) => (NIVEAUX.find((x) => x.v === n)?.t || n || "standard").split(" — ")[0];
-
   return (
     <>
       <Entete />
       <main className="page">
         <h1>Comptes de l'étude</h1>
-        <p className="sous-titre">Créez, modifiez, désactivez les accès de vos collaborateurs.
-          Les mots de passe ne sont jamais stockés en clair : un code provisoire est généré, affiché une seule fois,
-          puis changé par le collaborateur à sa première connexion.</p>
+        <p className="sous-titre">Le mot de passe provisoire s'affiche une seule fois : transmettez-le de vive voix.
+          Le collaborateur le change à sa première connexion. Aucun mot de passe n'est stocké en clair.</p>
 
         {erreur && <div className="erreur">{erreur}</div>}
         {info && <p className="sous-titre" style={{ color: "#2E7D32", fontWeight: 600 }}>{info}</p>}
@@ -150,101 +164,116 @@ export default function Comptes() {
         {mdpAffiche && (
           <div className="carte" style={{ background: "#FBF9F2", borderColor: "#E4D3A0" }}>
             <h1 style={{ fontSize: 15, color: "#8A6D1F" }}>🔑 Mot de passe provisoire — à transmettre maintenant</h1>
-            <p className="sous-titre">Pour le compte <strong>{mdpAffiche.identifiant}</strong>.
-              Il ne sera plus jamais affiché. Communiquez-le de vive voix, jamais par e-mail.</p>
+            <p className="sous-titre">Pour <strong>{mdpAffiche.identifiant}</strong>. Il ne sera plus jamais affiché.
+              Communiquez-le de vive voix, jamais par courriel.</p>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <code style={{ background: "#fff", border: "1px solid #E4D3A0", borderRadius: 6,
-                padding: "9px 14px", fontSize: 16, letterSpacing: 1 }}>{mdpAffiche.mdp}</code>
+                             padding: "10px 16px", fontSize: 17, letterSpacing: 1.5 }}>{mdpAffiche.mdp}</code>
               <button className="bouton secondaire" onClick={() => copier(mdpAffiche.mdp)}>📋 Copier</button>
               <button className="bouton" onClick={() => setMdpAffiche(null)}>J'ai noté, fermer</button>
             </div>
           </div>
         )}
 
-        <div className="carte">
-          <h1 style={{ fontSize: 15 }}>{enEdition ? "Modifier le collaborateur" : "Nouveau collaborateur"}</h1>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
-            <label>Identifiant de connexion *
-              <input value={form.identifiant} onChange={maj("identifiant")}
-                placeholder="ex. clerc4" disabled={!!enEdition} required /></label>
-            <label>Nom et prénom (état civil)
-              <input value={form.nom_complet} onChange={maj("nom_complet")} placeholder="ex. KOFFI Awa" /></label>
-            <label>Nom affiché *
-              <input value={form.nom_affiche} onChange={maj("nom_affiche")} placeholder="ex. Mme Koffi Awa" required /></label>
-            <label>Fonction
-              <select value={form.fonction} onChange={maj("fonction")}>
-                {FONCTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select></label>
-            <label>Niveau d'accès
-              <select value={form.niveau_acces} onChange={maj("niveau_acces")}>
-                {NIVEAUX.map((n) => <option key={n.v} value={n.v}>{n.t}</option>)}
-              </select></label>
-            {!enEdition && (
-              <label>Mot de passe provisoire * (8 caractères min.)
-                <div style={{ display: "flex", gap: 6 }}>
-                  <div style={{ flex: 1 }}>
-                    <ChampMdp valeur={form.motDePasseProvisoire} onChange={maj("motDePasseProvisoire")} requis />
-                  </div>
-                  <button type="button" className="bouton secondaire"
-                    style={{ whiteSpace: "nowrap", padding: "6px 10px", fontSize: 12 }}
-                    onClick={generer}>🎲 Générer</button>
-                </div>
-              </label>
-            )}
-          </div>
-          <p className="sous-titre" style={{ marginTop: 8 }}>
-            La <strong>fonction</strong> décrit le poste ; le <strong>niveau d'accès</strong> décide de ce que la personne voit.
-            Choisir « Notaire » ou « Comptable » propose le niveau adapté — vous restez libre de le changer.
-          </p>
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            {enEdition ? (<>
-              <button className="bouton" onClick={enregistrerModif}>Enregistrer les modifications</button>
-              <button className="bouton secondaire" onClick={() => { setEnEdition(null); setForm(VIDE); }}>Annuler</button>
-            </>) : (
-              <button className="bouton" onClick={creer}>Créer le compte</button>
-            )}
-          </div>
+        <div style={{ marginBottom: 14 }}>
+          <button className="bouton" onClick={() => { setOuvert(!ouvert); setForm(VIDE); setEdition(null); }}>
+            {ouvert ? "− Annuler" : "+ Ajouter un collaborateur"}
+          </button>
         </div>
+
+        {ouvert && (
+          <div className="carte">
+            <h1 style={{ fontSize: 15, marginBottom: 10 }}>Nouveau collaborateur</h1>
+            <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.3fr 1.2fr 1.3fr", gap: 14 }}>
+              <label>Identifiant (nom affiché) *
+                <input value={form.identifiant} onChange={maj("identifiant")} placeholder="ex. Mme Koffi Awa" required /></label>
+              <label>Nom et prénom (état civil)
+                <input value={form.nom_complet} onChange={maj("nom_complet")} placeholder="ex. KOFFI Awa Léontine" /></label>
+              <label>Fonction
+                <select value={form.fonction} onChange={maj("fonction")}>
+                  {FONCTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select></label>
+              <label>Niveau d'accès
+                <select value={form.niveau_acces} onChange={maj("niveau_acces")}>
+                  {NIVEAUX.map((n) => <option key={n.v} value={n.v}>{n.t}</option>)}
+                </select>
+                <span style={{ display: "block", fontSize: 10.5, color: "#7A8396", marginTop: 3 }}>
+                  {NIVEAUX.find((n) => n.v === form.niveau_acces)?.d}
+                </span>
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, maxWidth: 460 }}>
+              <label style={{ flex: 1 }}>Mot de passe provisoire * — 8 caractères minimum
+                <ChampMdp valeur={form.motDePasseProvisoire} onChange={maj("motDePasseProvisoire")} /></label>
+              <button type="button" className="bouton secondaire" style={{ whiteSpace: "nowrap" }}
+                      onClick={generer}>🎲 Générer</button>
+            </div>
+            <p style={{ marginTop: 14 }}>
+              <button className="bouton" onClick={creer}>Créer le compte</button>
+            </p>
+          </div>
+        )}
 
         <table>
           <thead><tr>
-            <th>Identifiant</th><th>Nom et prénom</th><th>Nom affiché</th>
-            <th>Fonction</th><th>Niveau d'accès</th><th>État</th><th>Actions</th>
+            <th style={{ width: "22%" }}>Identifiant (nom affiché)</th>
+            <th style={{ width: "20%" }}>Nom et prénom</th>
+            <th style={{ width: "18%" }}>Fonction</th>
+            <th style={{ width: "13%" }}>Niveau d'accès</th>
+            <th style={{ width: "15%" }}>État</th>
+            <th style={{ textAlign: "right" }}>Actions</th>
           </tr></thead>
           <tbody>
             {lignes.map((u) => {
-              const admin = u.niveau_acces === "administrateur";
+              const estAdmin = u.niveau_acces === "administrateur";
+              const enCours = edition === u.id;
               return (
-                <tr key={u.id} style={{ background: !u.actif ? "#F0EAF8" : u.verrouille ? "#FFF4C2" : undefined }}>
-                  <td>{u.identifiant}</td>
-                  <td>{u.nom_complet || "—"}</td>
-                  <td>{u.nom_affiche}</td>
-                  <td>{u.fonction || "—"}</td>
-                  <td>{libelleNiveau(u.niveau_acces)}</td>
-                  <td>{!u.actif ? "Désactivé" : u.verrouille ? "🔒 Verrouillé" : u.doit_changer_mdp ? "Mdp provisoire" : "Actif"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button className="bouton secondaire" style={{ padding: "3px 8px", fontSize: 11, marginRight: 4 }}
-                      onClick={() => modifier(u)}>Modifier</button>
-                    <button className="bouton secondaire" style={{ padding: "3px 8px", fontSize: 11, marginRight: 4 }}
-                      onClick={() => action(u.id, "reinitialiser")}>Réinit. mdp</button>
-                    {u.verrouille && (
-                      <button className="bouton secondaire" style={{ padding: "3px 8px", fontSize: 11, marginRight: 4 }}
-                        onClick={() => action(u.id, "deverrouiller")}>Déverrouiller</button>
-                    )}
-                    {!admin && (<>
-                      <button className="bouton secondaire" style={{ padding: "3px 8px", fontSize: 11, marginRight: 4 }}
-                        onClick={() => action(u.id, u.actif ? "desactiver" : "reactiver")}>
-                        {u.actif ? "Désactiver" : "Réactiver"}</button>
-                      <button className="bouton secondaire"
-                        style={{ padding: "3px 8px", fontSize: 11, color: "#C00000", borderColor: "#E0B4B4" }}
-                        onClick={() => supprimer(u)}>Supprimer</button>
-                    </>)}
-                  </td>
+                <tr key={u.id} style={{ background: !u.actif ? "#F7F4FB" : enCours ? "#FBF9F2" : undefined }}>
+                  {enCours ? (<>
+                    <td><input value={brouillon.nom_affiche} onChange={majBrouillon("nom_affiche")} style={{ fontSize: 12 }} /></td>
+                    <td><input value={brouillon.nom_complet} onChange={majBrouillon("nom_complet")} style={{ fontSize: 12 }} /></td>
+                    <td><select value={brouillon.fonction} onChange={majBrouillon("fonction")} style={{ fontSize: 11.5 }}>
+                          {FONCTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</select></td>
+                    <td><select value={brouillon.niveau_acces} onChange={majBrouillon("niveau_acces")} style={{ fontSize: 11.5 }}>
+                          {NIVEAUX.map((n) => <option key={n.v} value={n.v}>{n.t}</option>)}</select></td>
+                    <td><Etat u={u} /></td>
+                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                      <button className="icone" title="Enregistrer" onClick={() => enregistrer(u.id)}>✅</button>
+                      <button className="icone" title="Annuler" onClick={() => setEdition(null)}>✖️</button>
+                    </td>
+                  </>) : (<>
+                    <td style={{ fontWeight: 500 }}>{u.identifiant}</td>
+                    <td style={{ color: "#5A6478" }}>{u.nom_complet || "—"}</td>
+                    <td>{u.fonction || "—"}</td>
+                    <td><Badge niveau={u.niveau_acces} /></td>
+                    <td style={{ fontSize: 11.5 }}><Etat u={u} /></td>
+                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                      <button className="icone" title="Modifier ce compte" onClick={() => ouvrirEdition(u)}>✏️</button>
+                      <button className="icone" title="Réinitialiser le mot de passe"
+                              onClick={() => action(u.id, "reinitialiser")}>🔑</button>
+                      {Boolean(u.verrouille) && (
+                        <button className="icone" title="Déverrouiller" onClick={() => action(u.id, "deverrouiller")}>🔓</button>
+                      )}
+                      {!estAdmin && (<>
+                        <button className="icone" title={u.actif ? "Désactiver" : "Réactiver"}
+                                onClick={() => action(u.id, u.actif ? "desactiver" : "reactiver")}>
+                          {u.actif ? "⏸️" : "▶️"}</button>
+                        <button className="icone danger" title="Supprimer définitivement"
+                                onClick={() => supprimer(u)}>🗑️</button>
+                      </>)}
+                    </td>
+                  </>)}
                 </tr>
               );
             })}
           </tbody>
         </table>
+
+        <div style={{ marginTop: 16, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11, color: "#7A8396" }}>
+          {NIVEAUX.map((n) => (
+            <span key={n.v}><Badge niveau={n.v} /> <span style={{ marginLeft: 5 }}>{n.d}</span></span>
+          ))}
+        </div>
       </main>
     </>
   );

@@ -24,6 +24,28 @@ const ACTES_COLS_PG = [
   ["statut_formalites", "VARCHAR NOT NULL DEFAULT 'Pas encore débuté'"],
 ];
 
+async function ensureVisiteClient(queryFn, sqlite = false) {
+  const { rows: etudes } = await queryFn(`SELECT id FROM etudes`);
+  for (const { id: etudeId } of etudes) {
+    const found = await queryFn(
+      `SELECT 1 AS ok FROM referentiels WHERE etude_id = $1 AND type_liste = 'type_flux' AND valeur = 'Visite Client' LIMIT 1`,
+      [etudeId]
+    );
+    if (found.rows[0]) continue;
+    if (sqlite) {
+      await queryFn(
+        `INSERT INTO referentiels (id, etude_id, type_liste, valeur, ordre) VALUES ($1,$2,'type_flux','Visite Client',4)`,
+        [crypto.randomUUID(), etudeId]
+      );
+    } else {
+      await queryFn(
+        `INSERT INTO referentiels (etude_id, type_liste, valeur, ordre) VALUES ($1,'type_flux','Visite Client',4)`,
+        [etudeId]
+      );
+    }
+  }
+}
+
 async function migrateV27Pg(client) {
   for (const [col, def] of ACTES_COLS_PG)
     await client.query(`ALTER TABLE actes ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -157,6 +179,8 @@ async function migratePg() {
     [hash]
   );
 
+  console.log("→ référentiel Visite Client");
+  await ensureVisiteClient((sql, params) => client.query(sql, params), false);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo((sql, params) => client.query(sql, params), true);
   console.log("→ seed-saas-complete (5 études de recette)");
@@ -224,6 +248,8 @@ async function migratePgWithConnectionString(url, label = "postgres") {
      WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
     [hash]
   );
+  console.log("→ référentiel Visite Client");
+  await ensureVisiteClient((sql, params) => client.query(sql, params), false);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo((sql, params) => client.query(sql, params), true);
   console.log("→ seed-saas-complete (5 études de recette)");
@@ -324,6 +350,8 @@ async function migrateSqliteAsync() {
     db.prepare(s).run(...expanded);
     return { rows: [] };
   };
+  console.log("→ référentiel Visite Client");
+  await ensureVisiteClient(queryFn, true);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo(queryFn, false);
   console.log("→ seed-saas-complete (5 études de recette)");

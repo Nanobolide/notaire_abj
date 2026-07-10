@@ -49,8 +49,8 @@ export async function POST(req) {
     if (!saisitPrevision(s))
       for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];
     if (!voitMontants(s))
-      for (const ch of ["emoluments","exonere_tva","droits_etat","debours","debours_rembourses",
-        "prestations_annexes","autres_depenses","autres_depenses_motif"]) delete d[ch];
+      for (const ch of ["emoluments","exonere_tva","droits_etat","debours",
+        "autres_depenses","autres_depenses_motif"]) delete d[ch];
     if (!d.responsable?.trim()) {
       const { rows: [n] } = await withTenant(s.etudeId, async (c) =>
         c.query(

@@ -10,8 +10,8 @@ import { couleurActe, joursEcoules, respectEcheance, resteAPayer, formatFcfa } f
 const VIDE = { numero_minute: "", numero_dossier: "", nature_acte: "", complexite: "Simple",
   responsable: "", conservation_fonciere: "", progression: "Rédaction",
   valeur_acte: "", honoraires_totaux: "", montant_regle: "", statut_paiement: "En attente",
-  emoluments: "", droits_etat: "", debours: "", prestations_annexes: "",
-  autres_depenses: "", autres_depenses_motif: "", debours_rembourses: false,
+  emoluments: "", droits_etat: "", debours: "",
+  autres_depenses: "", autres_depenses_motif: "",
   parties: ["", ""], difficultes: "", observations: "" };
 
 // Complexité pré-sélectionnée selon la nature (modifiable, sauf Succession : toujours Complexe)
@@ -236,7 +236,7 @@ function Actes() {
               <div style={{ fontSize: 13, fontWeight: 600, color: "#8A6D1F", marginBottom: 3 }}>
                 Ventilation comptable</div>
               <p style={{ fontSize: 11, color: "#7A6A45", marginBottom: 10, lineHeight: 1.45 }}>
-                Réservée au Notaire et au Comptable. Total facturé au client ={" "}
+                Réservée au Notaire, au Comptable et aux rédacteurs.{" "}
                 <strong>émoluments + droits d'État + débours + autres dépenses</strong>.
                 Seuls les <strong>émoluments</strong> sont un revenu de l'étude.
               </p>
@@ -247,24 +247,25 @@ function Actes() {
                   <input type="number" min="0" value={form.droits_etat} onChange={maj("droits_etat")} /></label>
                 <label>Débours (FCFA)
                   <input type="number" min="0" value={form.debours} onChange={maj("debours")} /></label>
-                <label>Prestations annexes (FCFA)
-                  <input type="number" min="0" value={form.prestations_annexes} onChange={maj("prestations_annexes")} /></label>
                 <label>Autres dépenses (FCFA)
                   <input type="number" min="0" value={form.autres_depenses} onChange={maj("autres_depenses")} /></label>
                 <label>Motif des autres dépenses
                   <input value={form.autres_depenses_motif} onChange={maj("autres_depenses_motif")}
                          placeholder="ex. redressement" /></label>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, fontSize: 12 }}>
-                <input type="checkbox" checked={!!form.debours_rembourses}
-                       onChange={(e) => setForm({ ...form, debours_rembourses: e.target.checked })}
-                       style={{ width: "auto" }} />
-                Débours remboursés par le client
-              </label>
               <p style={{ fontSize: 12, color: "#1F3864", marginTop: 10, fontWeight: 600 }}>
-                Total facturé : {(Number(form.emoluments || 0) + Number(form.droits_etat || 0) +
-                  Number(form.debours || 0) + Number(form.prestations_annexes || 0) +
-                  Number(form.autres_depenses || 0)).toLocaleString("fr-FR")} FCFA
+                Total ventilé : {(Number(form.emoluments || 0) + Number(form.droits_etat || 0) +
+                  Number(form.debours || 0) + Number(form.autres_depenses || 0)).toLocaleString("fr-FR")} FCFA
+                {Number(form.honoraires_totaux || 0) > 0 && (
+                  <span style={{ marginLeft: 12, fontWeight: 400,
+                    color: (Number(form.emoluments||0)+Number(form.droits_etat||0)+Number(form.debours||0)+Number(form.autres_depenses||0))
+                            === Number(form.honoraires_totaux||0) ? "#2E7D32" : "#B03030" }}>
+                    {(Number(form.emoluments||0)+Number(form.droits_etat||0)+Number(form.debours||0)+Number(form.autres_depenses||0))
+                      === Number(form.honoraires_totaux||0)
+                      ? "✓ correspond aux frais annoncés"
+                      : `⚠ frais annoncés : ${Number(form.honoraires_totaux).toLocaleString("fr-FR")} FCFA`}
+                  </span>
+                )}
               </p>
             </div>
             )}

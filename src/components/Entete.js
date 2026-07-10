@@ -57,7 +57,6 @@ export default function Entete() {
         {lien("/tableau-de-bord", "Tableau de bord")}
         {session?.fonction !== "Accueil" && lien("/actes", "Actes & Minutes")}
         {lien("/appels", "Appels & Courriers")}
-        {voitFinancier && lien("/comptabilite", "Comptabilité")}
       </nav>
       <div className="zone-param" ref={ref}>
         <button className="param-btn" onClick={() => setMenuOuvert(!menuOuvert)}>⚙ Paramètres ▾</button>

@@ -15,7 +15,7 @@ export async function GET() {
 
       const { rows: gens } = await c.query(
         `SELECT nom_affiche, fonction FROM utilisateurs
-         WHERE etude_id = $1 AND actif = true ORDER BY nom_affiche`,
+         WHERE etude_id = $1 AND actif = true AND role <> 'super_admin' ORDER BY nom_affiche`,
         [s.etudeId]);
       out.responsables_actes = gens.filter((u) => estRedacteur(u.fonction)).map((u) => u.nom_affiche);
       out.responsables_appels = gens.map((u) => u.nom_affiche);

@@ -1,5 +1,5 @@
 /**
- * Matrice centralisee des droits NOTARIA (V3 + socle v3.1).
+ * Matrice centralisee des droits NOTARIA (V3 + socle v3.2).
  * Toute autorisation doit passer par ce module.
  */
 export const NIVEAUX = ["administrateur", "notaire_salarie", "comptable", "standard"];
@@ -36,6 +36,7 @@ export const voitTableauActes = (s) => estNotaire(s);
 export const voitTableauAppels = (s) => true;
 export const voitFinancier = (s) => estNotaire(s) || estComptable(s);
 
+/** Comptable = droits rédacteur + ventilation. */
 export const saisitPrevision = (s) => estNotaire(s) || estComptable(s) || estRedacteur(s?.fonction);
 export const saisitDepenses = (s) => estNotaire(s) || estComptable(s);
 export const modifieFormalites = (s) => estNotaire(s) || estComptable(s) || estFormaliste(s);
@@ -46,8 +47,8 @@ export const supprimeCompte = (s) => estAdministrateur(s);
 export const modifieTva = (s) => estNotaire(s) || estComptable(s);
 
 const CHAMPS_VENTILATION = [
-  "emoluments", "exonere_tva", "droits_etat", "debours", "debours_rembourses",
-  "prestations_annexes", "autres_depenses", "autres_depenses_motif",
+  "emoluments", "exonere_tva", "droits_etat", "debours",
+  "autres_depenses", "autres_depenses_motif",
 ];
 
 const CHAMPS_PREVISION = ["valeur_acte", "honoraires_totaux", "montant_regle", "statut_paiement"];
@@ -65,13 +66,11 @@ export function filtrerActe(ligne, s) {
 export function plafondReglement(d) {
   const n = (v) => Number(v || 0);
   const totalFrais = n(d.honoraires_totaux);
-  const ventile = n(d.emoluments) + n(d.droits_etat) + n(d.debours) +
-                  n(d.prestations_annexes) + n(d.autres_depenses);
+  const ventile = n(d.emoluments) + n(d.droits_etat) + n(d.debours) + n(d.autres_depenses);
   return totalFrais > 0 ? totalFrais : ventile;
 }
 
 export function estVentile(d) {
   const n = (v) => Number(v || 0);
-  return n(d.emoluments) + n(d.droits_etat) + n(d.debours) +
-         n(d.prestations_annexes) + n(d.autres_depenses) > 0;
+  return n(d.emoluments) + n(d.droits_etat) + n(d.debours) + n(d.autres_depenses) > 0;
 }
