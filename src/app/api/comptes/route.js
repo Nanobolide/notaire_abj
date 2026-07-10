@@ -12,7 +12,7 @@ export async function GET() {
       (await c.query(
         `SELECT id, identifiant, nom_affiche, nom_complet, fonction, niveau_acces, role, actif, doit_changer_mdp,
                 (verrouille_jusqua IS NOT NULL AND verrouille_jusqua > ${now()}) AS verrouille
-         FROM utilisateurs WHERE etude_id = $1 ORDER BY role, nom_affiche`, [s.etudeId])).rows);
+         FROM utilisateurs WHERE etude_id = $1 AND role <> 'super_admin' ORDER BY role, nom_affiche`, [s.etudeId])).rows);
     return NextResponse.json(rows);
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }

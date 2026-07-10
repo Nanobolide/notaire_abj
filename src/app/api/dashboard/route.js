@@ -20,7 +20,7 @@ export async function GET() {
           : `(derniere_activite IS NOT NULL AND derniere_activite > datetime('now', '-5 minutes'))`;
         presence = (await c.query(
           `SELECT nom_affiche, fonction, role, derniere_activite, ${enLigne} AS en_ligne
-           FROM utilisateurs WHERE etude_id = $1 AND ${actifClause("")} ORDER BY en_ligne DESC, role, nom_affiche`,
+           FROM utilisateurs WHERE etude_id = $1 AND role <> 'super_admin' AND ${actifClause("")} ORDER BY en_ligne DESC, role, nom_affiche`,
           [s.etudeId]
         )).rows;
       }

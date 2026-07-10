@@ -22,6 +22,7 @@ INSERT OR IGNORE INTO referentiels (id, etude_id, type_liste, valeur, ordre) VAL
 ('r001','11111111-1111-1111-1111-111111111111','type_flux','Appel Téléphonique',1),
 ('r002','11111111-1111-1111-1111-111111111111','type_flux','Courrier Physique',2),
 ('r003','11111111-1111-1111-1111-111111111111','type_flux','Courrier Électronique',3),
+('r003b','11111111-1111-1111-1111-111111111111','type_flux','Visite Client',4),
 ('r004','11111111-1111-1111-1111-111111111111','destinataire','Le Notaire',1),
 ('r005','11111111-1111-1111-1111-111111111111','destinataire','Clerc 1',2),
 ('r006','11111111-1111-1111-1111-111111111111','destinataire','Clerc 2',3),

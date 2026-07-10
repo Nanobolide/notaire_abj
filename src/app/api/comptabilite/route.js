@@ -6,7 +6,7 @@ import { isPg } from "@/lib/dialect";
 
 function fragments() {
   const total = `honoraires_totaux`;
-  const ventile = `(emoluments + droits_etat + debours + prestations_annexes + autres_depenses)`;
+  const ventile = `(emoluments + droits_etat + debours + autres_depenses)`;
   const estVentile = `(${ventile} > 0)`;
   const enCours = isPg()
     ? "count(*) FILTER (WHERE progression NOT IN ('Terminé','Annulé'))"
@@ -17,14 +17,9 @@ function fragments() {
   const droitsImpayes = isPg()
     ? "count(*) FILTER (WHERE droits_etat > 0 AND montant_regle < droits_etat)"
     : "SUM(CASE WHEN droits_etat > 0 AND montant_regle < droits_etat THEN 1 ELSE 0 END)";
-  const deboursNonRemb = "CASE WHEN NOT debours_rembourses THEN debours ELSE 0 END";
-  const aRembourser = `CASE WHEN NOT debours_rembourses THEN debours + depenses_formalites ELSE 0 END`;
   const n = (expr) => (isPg() ? `COALESCE(${expr},0)::bigint` : `COALESCE(${expr},0)`);
   const entier = (expr) => (isPg() ? `${expr}::int` : `CAST(${expr} AS INTEGER)`);
-  const ventileBool = isPg()
-    ? `bool_and(${estVentile})`
-    : `MIN(CASE WHEN ${estVentile} THEN 1 ELSE 0 END) = 1`;
-  return { total, ventile, estVentile, enCours, dossiersAVentiler, droitsImpayes, deboursNonRemb, aRembourser, n, entier, ventileBool };
+  return { total, ventile, estVentile, enCours, dossiersAVentiler, droitsImpayes, n, entier };
 }
 
 export async function GET() {
@@ -48,7 +43,6 @@ export async function GET() {
                ${f.n("SUM(montant_regle)")} AS encaisse,
                ${f.n(`SUM(${f.total}) - SUM(montant_regle)`)} AS reste_a_recouvrer,
                ${f.entier(f.dossiersAVentiler)} AS dossiers_a_ventiler,
-               ${f.n(`SUM(${f.deboursNonRemb})`)} AS debours_non_rembourses,
                ${f.n("SUM(debours)")} AS debours_total
         FROM actes WHERE ${filtre}`, [s.etudeId]);
 
@@ -79,8 +73,7 @@ export async function GET() {
                ${f.entier("count(DISTINCT a.id)")} AS dossiers,
                ${f.n(`SUM(${f.total})`)} AS facture,
                ${f.n("SUM(a.montant_regle)")} AS encaisse,
-               ${f.n(`SUM(${f.total}) - SUM(a.montant_regle)`)} AS solde,
-               ${f.ventileBool} AS ventile
+               ${f.n(`SUM(${f.total}) - SUM(a.montant_regle)`)} AS solde
         FROM actes a
         JOIN acte_parties p ON p.acte_id = a.id AND p.ordre = 1 AND p.etude_id = a.etude_id
         WHERE a.etude_id = $1 AND a.supprime_le IS NULL AND a.progression <> 'Annulé'
@@ -90,7 +83,6 @@ export async function GET() {
 
       const { rows: [formalites] } = await c.query(`
         SELECT ${f.n("SUM(depenses_formalites)")} AS depense,
-               ${f.n(`SUM(${f.aRembourser})`)} AS a_rembourser,
                ${f.n("SUM(debours)")} AS debours,
                ${f.entier(f.droitsImpayes)} AS dossiers_droits_impayes
         FROM actes WHERE ${filtre}`, [s.etudeId]);

@@ -5,6 +5,10 @@ import { lireJson } from "@/lib/http";
 
 const fcfa = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("fr-FR") + " F");
 
+/**
+ * P2.3 — Le reste à payer. Tant qu'un dossier n'est pas ventilé, on n'invente pas de trop-perçu :
+ * on affiche « À ventiler ». Le trop-perçu n'apparaît que si l'encaissé dépasse un total réel.
+ */
 function Reste({ valeur, ventile = true }) {
   const v = Number(valeur || 0);
   if (!ventile && v <= 0) return <span className="badge-ventiler">À ventiler</span>;
@@ -59,7 +63,6 @@ export default function Comptabilite() {
           <Compteur valeur={g.emoluments} libelle="Émoluments — revenu de l'étude" ton="vert" />
           <Compteur valeur={g.droits_etat} libelle="Droits d'État à reverser" ton="orange" />
           <Compteur valeur={g.debours_total} libelle="Débours" ton="orange" />
-          <Compteur valeur={g.debours_non_rembourses} libelle="Débours non remboursés" ton="rouge" />
           <Compteur valeur={g.autres_depenses} libelle="Autres dépenses" ton="orange" />
           <Compteur valeur={g.total_facture} libelle="Total facturé aux clients" />
           <Compteur valeur={g.encaisse} libelle="Encaissé" ton="vert" />
@@ -73,11 +76,14 @@ export default function Comptabilite() {
             entre Droits d'État, Débours et Émoluments.
           </p>
         )}
+        <div style={{ display: "none" }}>
+        </div>
         <p style={{ fontSize: 11, color: "#8A6D1F", background: "#FBF6E9", border: "0.5px solid #E4D3A0",
                     borderRadius: 7, padding: "9px 11px" }}>
           💡 <strong>Le total des frais</strong> ({fcfa(g.total_facture)}) est ce que paie le client. Le comptable le
           <strong> ventile</strong> en Droits d'État, Débours et Émoluments. Seuls les <strong>émoluments</strong>{" "}
-          ({fcfa(g.emoluments)}) sont un revenu de l'étude. Total ventilé à ce jour : {fcfa(g.total_ventile)}.
+          ({fcfa(g.emoluments)}) sont un revenu de l'étude : les droits d'État reviennent au Trésor et les débours
+          couvrent des frais engagés pour le dossier. Total ventilé à ce jour : {fcfa(g.total_ventile)}.
         </p>
 
         <Bandeau>B · RENTABILITÉ PAR CATÉGORIE D'ACTE</Bandeau>
@@ -93,12 +99,13 @@ export default function Comptabilite() {
               <tr key={r.nature_acte}>
                 <td style={{ fontWeight: 500 }}>{r.nature_acte}</td>
                 <td className="num">{r.dossiers}</td>
-                <td className="num" style={{ color: "#2E7D32", fontWeight: 600 }}>{fcfa(r.emoluments)}</td>
+                <td className="num" style={{ color: Number(r.emoluments) > 0 ? "#2E7D32" : "#8A94A8", fontWeight: 600 }}>
+                  {Number(r.emoluments) > 0 ? fcfa(r.emoluments) : <span className="badge-ventiler">à ventiler</span>}</td>
                 <td className="num">{fcfa(r.droits_etat)}</td>
                 <td className="num">{fcfa(r.depenses)}</td>
                 <td className="num">{fcfa(r.total_facture)}</td>
                 <td className="num">{fcfa(r.encaisse)}</td>
-                <td className="num"><Reste valeur={r.reste} ventile={Number(r.emoluments) + Number(r.droits_etat) > 0} /></td>
+                <td className="num"><Reste valeur={r.reste} /></td>
               </tr>
             ))}
           </tbody>
@@ -120,7 +127,7 @@ export default function Comptabilite() {
                 <td className="num" style={{ color: "#2E7D32", fontWeight: 600 }}>{fcfa(r.emoluments)}</td>
                 <td className="num">{fcfa(r.debours)}</td>
                 <td className="num">{fcfa(r.encaisse)}</td>
-                <td className="num"><Reste valeur={r.reste} ventile={Number(r.emoluments) > 0} /></td>
+                <td className="num"><Reste valeur={r.reste} /></td>
               </tr>
             ))}
           </tbody>
@@ -138,7 +145,7 @@ export default function Comptabilite() {
               <tr key={i}>
                 <td>{r.client}</td><td className="num">{r.dossiers}</td>
                 <td className="num">{fcfa(r.facture)}</td><td className="num">{fcfa(r.encaisse)}</td>
-                <td className="num"><Reste valeur={r.solde} ventile={r.ventile !== false && r.ventile !== 0} /></td>
+                <td className="num"><Reste valeur={r.solde} /></td>
               </tr>
             ))}
             {d.balance.length === 0 && (
@@ -150,7 +157,6 @@ export default function Comptabilite() {
         <Bandeau>E · TRÉSORERIE DES FORMALITÉS</Bandeau>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Compteur valeur={d.formalites.depense} libelle="Dépensé en formalités" ton="orange" />
-          <Compteur valeur={d.formalites.a_rembourser} libelle="À rembourser par les clients" ton="rouge" />
           <Compteur valeur={d.formalites.debours} libelle="Débours engagés" ton="orange" />
           <div style={{ background: "#fff", border: "0.5px solid #D9DEE8", borderLeft: "4px solid #B03030",
                         borderRadius: "0 8px 8px 0", padding: "9px 13px", minWidth: 138 }}>

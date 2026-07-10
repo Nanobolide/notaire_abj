@@ -1,6 +1,7 @@
 /** Référentiels par défaut appliqués à toute nouvelle étude provisionnée. */
 export const REFERENTIELS_DEFAUT = [
   ["type_flux", "Appel Téléphonique"], ["type_flux", "Courrier Physique"], ["type_flux", "Courrier Électronique"],
+  ["type_flux", "Visite Client"],
   ["destinataire", "Le Notaire"], ["destinataire", "Clerc 1"], ["destinataire", "Clerc 2"],
   ["destinataire", "Clerc 3"], ["destinataire", "Comptabilité"], ["destinataire", "Formaliste"], ["destinataire", "Accueil"],
   ["motif", "Nouvelle demande"], ["motif", "Suivi dossier existant"], ["motif", "Réclamation"],
