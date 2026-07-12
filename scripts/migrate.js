@@ -177,20 +177,28 @@ async function migratePg() {
   )`);
   await client.query(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND niveau_acces = 'standard'`);
 
-  // Mot de passe démo pour les comptes seed (test à distance Render)
-  const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
-  await client.query(
-    `UPDATE utilisateurs SET hash_mot_de_passe = $1
-     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
-    [hash]
-  );
-
   console.log("→ référentiel Visite Client");
   await ensureVisiteClient((sql, params) => client.query(sql, params), false);
-  console.log("→ seed-demo (dossiers de démonstration)");
-  await seedDemo((sql, params) => client.query(sql, params), true);
-  console.log("→ seed-saas-complete (5 études de recette)");
-  await seedSaasComplete((sql, params) => client.query(sql, params), true);
+
+  // Les données de démonstration (dossiers fictifs, études de recette, mot de
+  // passe connu ChangezMoi2026!) ne se chargent QUE sur demande explicite —
+  // jamais par défaut, y compris quand NODE_ENV=production (cf. render.yaml
+  // pour l'environnement de test à distance, qui active SEED_DEMO=1).
+  if (process.env.SEED_DEMO === "1") {
+    // Mot de passe démo pour les comptes seed (test à distance Render)
+    const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+    await client.query(
+      `UPDATE utilisateurs SET hash_mot_de_passe = $1
+       WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
+      [hash]
+    );
+    console.log("→ seed-demo (dossiers de démonstration)");
+    await seedDemo((sql, params) => client.query(sql, params), true);
+    console.log("→ seed-saas-complete (5 études de recette)");
+    await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  } else {
+    console.log("→ SEED_DEMO non activé : données de démonstration non chargées.");
+  }
 
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
@@ -248,18 +256,22 @@ async function migratePgWithConnectionString(url, label = "postgres") {
     modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
   await client.query(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND niveau_acces = 'standard'`);
-  const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
-  await client.query(
-    `UPDATE utilisateurs SET hash_mot_de_passe = $1
-     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
-    [hash]
-  );
   console.log("→ référentiel Visite Client");
   await ensureVisiteClient((sql, params) => client.query(sql, params), false);
-  console.log("→ seed-demo (dossiers de démonstration)");
-  await seedDemo((sql, params) => client.query(sql, params), true);
-  console.log("→ seed-saas-complete (5 études de recette)");
-  await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  if (process.env.SEED_DEMO === "1") {
+    const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+    await client.query(
+      `UPDATE utilisateurs SET hash_mot_de_passe = $1
+       WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
+      [hash]
+    );
+    console.log("→ seed-demo (dossiers de démonstration)");
+    await seedDemo((sql, params) => client.query(sql, params), true);
+    console.log("→ seed-saas-complete (5 études de recette)");
+    await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  } else {
+    console.log("→ SEED_DEMO non activé : données de démonstration non chargées.");
+  }
   await client.end();
 }
 

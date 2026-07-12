@@ -23,3 +23,14 @@ services:
         fromDatabase:
           name: notariat
           property: connectionString
+      # Environnement de test à distance (cf. README) : charge délibérément les
+      # données de démonstration à chaque migration. Ne jamais faire ça sur un
+      # service Render destiné à de vraies données clients.
+      - key: SEED_DEMO
+        value: "1"
+      # ATTENTION RLS : le rôle unique fourni par `fromDatabase` est propriétaire
+      # du schéma sur Render (pas de rôle applicatif restreint séparé comme sur le
+      # déploiement VPS). schema.pg.sql force la RLS ; sans BYPASSRLS sur ce rôle,
+      # les fonctions SECURITY DEFINER (auth_lookup, etc.) et les accès cross-étude
+      # (console Super Admin) échoueront. À la première migration sur cette base :
+      #   ALTER ROLE <rôle Render> BYPASSRLS;

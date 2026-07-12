@@ -109,6 +109,7 @@ Configuré via `render.yaml` (plan free) :
 | `DATABASE_URL` | PostgreSQL Render (lié automatiquement) |
 | `JWT_SECRET` | Généré par Render |
 | `NODE_ENV` | `production` |
+| `SEED_DEMO` | `1` (charge les données de démo — jamais sur une base de vraies données) |
 
 **Flux** : push sur `main` → build (`npm run build`) → démarrage (`npm start`) → migration PG (`prestart`).
 
@@ -133,7 +134,11 @@ Configuré via `render.yaml` (plan free) :
    ```
 ## Données de démonstration (présentation client / PO)
 
-À chaque migration:
+En SQLite (dev local), chargées automatiquement à chaque migration, comme avant.
+
+En PostgreSQL, **uniquement si `SEED_DEMO=1`** est défini (jamais par défaut,
+y compris quand `NODE_ENV=production` — une base de vraies données ne doit
+jamais recevoir ces comptes de démo à mot de passe connu) :
 - si le marqueur `2026/0201` est absent, **30 actes** et **30 appels** fictifs
   (avril-juin 2026) sont chargés automatiquement pour l'étude pilote;
 - un seed SaaS complet crée **5 études notariales de test** (tenants),
