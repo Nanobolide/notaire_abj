@@ -80,12 +80,13 @@
   deconnecterPresence, purgerCorbeilleExpiree, auth_lookup, auth_apres_tentative) —
   logue une fois par process, pas en boucle.
 
-### 9. Migrations versionnées — ⏳ NON FAIT
-- Toujours un rejeu idempotent du schéma complet, pas de table `schema_migrations`.
-  Le bug du point 4 (ON CONFLICT) était le symptôme direct de cette absence.
-- Reste à faire : introduire un outil (node-pg-migrate, dbmate, ou maison) ou au
-  minimum une table `schema_migrations` + découpage de `schema.pg.sql` en fichiers
-  numérotés rejoués une seule fois chacun.
+### 9. Migrations versionnées — ✅ FAIT
+- `db/migrations/0001-0004` (numérotés, rejoués une seule fois chacun) + table
+  `schema_migrations` (filename UNIQUE) suivant l'état appliqué. `schema.pg.sql`,
+  `seed.pg.sql`, `schema.sql`, `seed.sql`, `demo.sql`, `demo_reset.sql` supprimés
+  (contenu repris dans les migrations, ou orphelins jamais exécutés). Testé sur le
+  serveur : 4 migrations appliquées au premier passage, second passage sans
+  ré-exécution, les 3 tests de sécurité repassent au vert après coup.
 
 ### 10. Corriger l'avertissement de module au seed — ✅ FAIT
 - `demo-data.js` → `demo-data.mjs`. Vérifié : plus d'avertissement
