@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Entete from "@/components/Entete";
+import Erreur from "@/components/Erreur";
 import { lireJson } from "@/lib/http";
 
 const FONCTIONS = [
@@ -158,7 +159,7 @@ export default function Comptes() {
         <p className="sous-titre">Le mot de passe provisoire s'affiche une seule fois : transmettez-le de vive voix.
           Le collaborateur le change à sa première connexion. Aucun mot de passe n'est stocké en clair.</p>
 
-        {erreur && <div className="erreur">{erreur}</div>}
+        <Erreur message={erreur} />
         {info && <p className="sous-titre" style={{ color: "#2E7D32", fontWeight: 600 }}>{info}</p>}
 
         {mdpAffiche && (

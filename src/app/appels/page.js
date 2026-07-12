@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Entete from "@/components/Entete";
+import Erreur from "@/components/Erreur";
+import Pagination from "@/components/Pagination";
 import { trier, fleche } from "@/lib/tri";
 import { lireJson } from "@/lib/http";
 import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
@@ -164,7 +166,7 @@ function Appels() {
               {enEdition && <button type="button" className="bouton secondaire" onClick={annulerEdition}>Annuler</button>}
             </div>
           </form>
-          {erreur && <div className="erreur">{erreur}</div>}
+          <Erreur message={erreur} />
           <p className="sous-titre" style={{ marginTop: 8 }}>
             L'heure de renseignement est capturée automatiquement à l'enregistrement.
           </p>
@@ -187,7 +189,7 @@ function Appels() {
           {sel("motif", filtres.motif, (e) => setFiltres({ ...filtres, motif: e.target.value }), "Tous motifs")}
           {sel("responsables_appels", filtres.destinataire, (e) => setFiltres({ ...filtres, destinataire: e.target.value }), "Tous responsables")}
         </div>
-        {erreur && <div className="erreur">{erreur}</div>}
+        <Erreur message={erreur} />
         <table className="registre">
           <thead>
             <tr>
@@ -240,13 +242,7 @@ function Appels() {
             })}
           </tbody>
         </table>
-        {meta.pages > 1 && (
-          <div className="pagination">
-            <button className="bouton secondaire" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Précédent</button>
-            <span>Page {page} / {meta.pages} — {meta.total} entrée(s)</span>
-            <button className="bouton secondaire" disabled={page >= meta.pages} onClick={() => setPage(page + 1)}>Suivant →</button>
-          </div>
-        )}
+        <Pagination page={page} totalPages={meta.pages} total={meta.total} unite="entrée(s)" onChange={setPage} />
         </>)}
       </main>
     </>

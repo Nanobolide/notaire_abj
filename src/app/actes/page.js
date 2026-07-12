@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Entete from "@/components/Entete";
+import Erreur from "@/components/Erreur";
+import Pagination from "@/components/Pagination";
 import { trier, fleche } from "@/lib/tri";
 import { lireJson } from "@/lib/http";
 import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
@@ -278,7 +280,7 @@ function Actes() {
               {enEdition && <button type="button" className="bouton secondaire" onClick={annulerEdition}>Annuler</button>}
             </div>
           </form>
-          {erreur && <div className="erreur">{erreur}</div>}
+          <Erreur message={erreur} />
         </div>
         )}
 
@@ -359,7 +361,7 @@ function Actes() {
           {sel("conservation_fonciere", filtres.conservation, (e) => setFiltres({ ...filtres, conservation: e.target.value }), "Toutes conservations")}
           {sel("statut_paiement", filtres.paiement, (e) => setFiltres({ ...filtres, paiement: e.target.value }), "Tous paiements")}
         </div>
-        {erreur && <div className="erreur">{erreur}</div>}
+        <Erreur message={erreur} />
         <table className="registre">
           <thead>
             <tr>
@@ -423,13 +425,7 @@ function Actes() {
             })}
           </tbody>
         </table>
-        {meta.pages > 1 && (
-          <div className="pagination">
-            <button className="bouton secondaire" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Précédent</button>
-            <span>Page {page} / {meta.pages} — {meta.total} dossier(s)</span>
-            <button className="bouton secondaire" disabled={page >= meta.pages} onClick={() => setPage(page + 1)}>Suivant →</button>
-          </div>
-        )}
+        <Pagination page={page} totalPages={meta.pages} total={meta.total} unite="dossier(s)" onChange={setPage} />
         </>)}
 
         {journal && (
