@@ -112,8 +112,14 @@ async function connectWithRetry(client, attempts = 5) {
 async function migratePg() {
   const bcrypt = require("bcryptjs");
   const { Client } = require("pg");
-  const url = process.env.DATABASE_URL;
+  // Les migrations créent des rôles/policies RLS et doivent contourner la RLS
+  // elles-mêmes (BYPASSRLS) : on utilise le rôle propriétaire (ADMIN_DATABASE_URL),
+  // jamais le rôle applicatif restreint notaria_app (DATABASE_URL).
+  const url = process.env.ADMIN_DATABASE_URL || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL manquant pour la migration PostgreSQL.");
+  if (!process.env.ADMIN_DATABASE_URL)
+    console.warn("⚠️  ADMIN_DATABASE_URL absent — migration jouée avec DATABASE_URL. " +
+      "Si ce rôle est notaria_app (RLS forcée), la migration va échouer sur les policies/rôles.");
 
   const client = new Client({ connectionString: url, ssl: pgSslOptions(url) });
   await connectWithRetry(client);
