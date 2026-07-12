@@ -14,7 +14,7 @@ VALUES
 ('a0000002-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','secretariat','Secrétariat','Secrétariat','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
 ('a0000003-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','clerc1','Clerc 1','Clerc 1','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true),
 ('a0000004-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','collaborateur','accueil','Accueil','Accueil','etude.kouassi@gmail.com','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true)
-ON CONFLICT (etude_id, identifiant) DO NOTHING;
+ON CONFLICT (identifiant) DO NOTHING;
 
 INSERT INTO utilisateurs (id, etude_id, role, identifiant, nom_affiche, fonction, email_rattachement, hash_mot_de_passe, doit_changer_mdp, niveau_acces)
 VALUES ('a0000005-1111-1111-1111-111111111111','11111111-1111-1111-1111-111111111111','super_admin','superadmin','Super Administrateur','Direction Produit','support@notaria.ci','$2a$10$tHzz3v3qkozJJaSqT2fnXeGoQ10z6cTyHyanu.nDyu5STWYMdxXkm',true,'administrateur')
