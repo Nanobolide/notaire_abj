@@ -85,8 +85,8 @@ Les registres démarrent **vides** : aucune donnée des fichiers Excel n'est mig
 
 | Périmètre | État |
 |---|---|
-| Schéma PostgreSQL multi-tenant + Row-Level Security **forcée** | ✅ Inclus (`db/schema.sql`) |
-| Référentiels : 29 conservations foncières, motifs, statuts… | ✅ Inclus (`db/seed.sql`) |
+| Schéma PostgreSQL multi-tenant + Row-Level Security **forcée** | ✅ Inclus (`db/migrations/`, migrations versionnées) |
+| Référentiels : 29 conservations foncières, motifs, statuts… | ✅ Inclus (`db/migrations/0004_seed_initial.sql`) |
 | Connexion identifiant + mot de passe, verrouillage après 5 échecs, session 30 min | ✅ Inclus |
 | Journal des Appels & Courriers : saisie hybride, SLA 72 h / 5 j, colorations V7 | ✅ Inclus |
 | Suivi des Actes : échéance auto J+14, colorations V2, volet financier FCFA | ✅ Inclus |
@@ -166,11 +166,12 @@ jamais recevoir ces comptes de démo à mot de passe connu) :
   et `ADMIN_DATABASE_URL` (compte administrateur, uniquement pour créer les deux
   études fictives du test — jamais utilisé par l'application).
 - L'application doit se connecter avec le rôle `notaria_app` (jamais superuser,
-  sinon la RLS ne s'applique pas). **La RLS est effectivement posée dans
-  `db/schema.pg.sql`** (policies `isolation_*`, `FORCE ROW LEVEL SECURITY`) — le rôle
-  `notaria_app` n'est PAS créé automatiquement par la migration (ça nécessiterait un
-  privilège CREATEROLE plus large que ce dont elle a besoin) : bootstrap manuel une
-  fois par base, procédure en commentaire juste avant le bloc RLS dans ce fichier.
+  sinon la RLS ne s'applique pas). **La RLS est effectivement posée par la migration
+  `db/migrations/0003_row_level_security.sql`** (policies `isolation_*`,
+  `FORCE ROW LEVEL SECURITY`) — le rôle `notaria_app` n'est PAS créé automatiquement
+  par la migration (ça nécessiterait un privilège CREATEROLE plus large que ce dont
+  elle a besoin) : bootstrap manuel une fois par base, procédure en commentaire en
+  tête de ce fichier de migration.
   Le propriétaire du schéma (celui qui joue les migrations, `ADMIN_DATABASE_URL`) a
   besoin de `BYPASSRLS` pour que les fonctions SECURITY DEFINER (auth_lookup...)
   fonctionnent — sans quoi la connexion elle-même est cassée. Un self-check au

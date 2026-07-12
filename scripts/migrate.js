@@ -1,6 +1,18 @@
 /**
  * Migration — PostgreSQL si DATABASE_URL (Render), sinon SQLite local.
- * Idempotent : CREATE IF NOT EXISTS / ON CONFLICT DO NOTHING.
+ *
+ * PostgreSQL : migrations VERSIONNÉES (db/migrations/NNNN_*.sql), chacune jouée
+ * une seule fois et suivie dans la table schema_migrations. Avant ce mécanisme,
+ * tout le schéma était rejoué à chaque déploiement (idempotent via IF NOT EXISTS /
+ * ON CONFLICT DO NOTHING) — un fichier cassé (cf. historique : ON CONFLICT visant
+ * une contrainte inexistante) n'était détecté qu'en le rejouant en entier sur une
+ * base fraîche, jamais isolément. Désormais chaque fichier ne s'exécute qu'une
+ * fois : une erreur dans un nouveau fichier n'affecte jamais les précédents, déjà
+ * marqués appliqués.
+ *
+ * SQLite (dev local) reste sur l'ancien mécanisme de rejeu idempotent complet :
+ * pas de vrai enjeu de dérive en dev, et le confort du "npm run dev" sans jamais
+ * se soucier de l'état de la base prime.
  */
 const fs = require("fs");
 const path = require("path");
@@ -10,19 +22,7 @@ const { seedDemo } = require("./seed-demo");
 const { seedSaasComplete } = require("./seed-saas-complete");
 
 const ROOT = path.join(__dirname, "..");
-
-const ACTES_COLS_PG = [
-  ["emoluments", "BIGINT NOT NULL DEFAULT 0"],
-  ["exonere_tva", "BOOLEAN NOT NULL DEFAULT false"],
-  ["droits_etat", "BIGINT NOT NULL DEFAULT 0"],
-  ["debours", "BIGINT NOT NULL DEFAULT 0"],
-  ["debours_rembourses", "BOOLEAN NOT NULL DEFAULT false"],
-  ["prestations_annexes", "BIGINT NOT NULL DEFAULT 0"],
-  ["autres_depenses", "BIGINT NOT NULL DEFAULT 0"],
-  ["autres_depenses_motif", "VARCHAR"],
-  ["depenses_formalites", "BIGINT NOT NULL DEFAULT 0"],
-  ["statut_formalites", "VARCHAR NOT NULL DEFAULT 'Pas encore débuté'"],
-];
+const MIGRATIONS_DIR = path.join(ROOT, "db", "migrations");
 
 async function ensureVisiteClient(queryFn, sqlite = false) {
   const { rows: etudes } = await queryFn(`SELECT id FROM etudes`);
@@ -44,28 +44,6 @@ async function ensureVisiteClient(queryFn, sqlite = false) {
       );
     }
   }
-}
-
-async function migrateV27Pg(client) {
-  for (const [col, def] of ACTES_COLS_PG)
-    await client.query(`ALTER TABLE actes ADD COLUMN IF NOT EXISTS ${col} ${def}`);
-  await client.query(`ALTER TABLE parametres_etude ADD COLUMN IF NOT EXISTS taux_tva NUMERIC(5,4) NOT NULL DEFAULT 0.18`);
-  await client.query(`CREATE TABLE IF NOT EXISTS avis (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    fonction VARCHAR,
-    categorie VARCHAR NOT NULL DEFAULT 'Amélioration',
-    message TEXT NOT NULL,
-    recu_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`CREATE OR REPLACE FUNCTION compte_etat(p_uid UUID)
-    RETURNS TABLE (ok BOOLEAN, niveau_acces VARCHAR, fonction VARCHAR)
-    LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-      SELECT (u.actif AND (u.role = 'super_admin' OR e.statut = 'active')
-              AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now())) AS ok,
-             u.niveau_acces, u.fonction
-      FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
-      WHERE u.id = p_uid;
-    $$`);
 }
 
 function migrateV27Sqlite(db) {
@@ -109,6 +87,60 @@ async function connectWithRetry(client, attempts = 5) {
   }
 }
 
+/** Rejoue les fichiers db/migrations/*.sql non encore appliqués, dans l'ordre, un par un. */
+async function runVersionedMigrations(client) {
+  await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    id SERIAL PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL UNIQUE,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  const { rows } = await client.query(`SELECT filename FROM schema_migrations`);
+  const appliquees = new Set(rows.map((r) => r.filename));
+
+  const fichiers = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+  for (const fichier of fichiers) {
+    if (appliquees.has(fichier)) continue;
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, fichier), "utf8");
+    console.log(`→ migration ${fichier}`);
+    try {
+      await client.query("BEGIN");
+      await client.query(sql);
+      await client.query(`INSERT INTO schema_migrations (filename) VALUES ($1)`, [fichier]);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error(`Erreur dans la migration ${fichier} :`, err.message);
+      throw err;
+    }
+  }
+}
+
+async function migratePgCommon(client, bcrypt) {
+  await runVersionedMigrations(client);
+
+  console.log("→ référentiel Visite Client");
+  await ensureVisiteClient((sql, params) => client.query(sql, params), false);
+
+  // Les données de démonstration (dossiers fictifs, études de recette, mot de
+  // passe connu ChangezMoi2026!) ne se chargent QUE sur demande explicite —
+  // jamais par défaut, y compris quand NODE_ENV=production (cf. render.yaml
+  // pour l'environnement de test à distance, qui active SEED_DEMO=1).
+  if (process.env.SEED_DEMO === "1") {
+    const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+    await client.query(
+      `UPDATE utilisateurs SET hash_mot_de_passe = $1
+       WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
+      [hash]
+    );
+    console.log("→ seed-demo (dossiers de démonstration)");
+    await seedDemo((sql, params) => client.query(sql, params), true);
+    console.log("→ seed-saas-complete (5 études de recette)");
+    await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  } else {
+    console.log("→ SEED_DEMO non activé : données de démonstration non chargées.");
+  }
+}
+
 async function migratePg() {
   const bcrypt = require("bcryptjs");
   const { Client } = require("pg");
@@ -125,80 +157,7 @@ async function migratePg() {
   await connectWithRetry(client);
   console.log("→ PostgreSQL (production Render)");
 
-  for (const file of ["db/schema.pg.sql", "db/seed.pg.sql"]) {
-    const sql = fs.readFileSync(path.join(ROOT, file), "utf8");
-    console.log(`→ ${file}`);
-    try {
-      await client.query(sql);
-    } catch (err) {
-      console.error(`Erreur dans ${file} :`, err.message);
-      throw err;
-    }
-  }
-
-  await migrateV27Pg(client);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_active BOOLEAN NOT NULL DEFAULT false`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_method VARCHAR(20) NOT NULL DEFAULT 'totp'`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_secret TEXT`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_backup_codes TEXT`);
-  await client.query(`CREATE TABLE IF NOT EXISTS security_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    etude_id UUID,
-    utilisateur UUID,
-    type_evenement VARCHAR(80) NOT NULL,
-    severite VARCHAR(20) NOT NULL DEFAULT 'info',
-    details JSONB,
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`CREATE TABLE IF NOT EXISTS saas_plans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(40) NOT NULL UNIQUE,
-    nom VARCHAR(120) NOT NULL,
-    prix_mensuel BIGINT NOT NULL DEFAULT 0,
-    prix_annuel BIGINT NOT NULL DEFAULT 0,
-    max_utilisateurs INT NOT NULL DEFAULT 10,
-    max_stockage_go INT NOT NULL DEFAULT 10,
-    actif BOOLEAN NOT NULL DEFAULT true,
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-    modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`CREATE TABLE IF NOT EXISTS saas_tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    etude_id UUID UNIQUE REFERENCES etudes(id) ON DELETE CASCADE,
-    nom_tenant VARCHAR(160) NOT NULL,
-    contact_nom VARCHAR(160),
-    contact_email VARCHAR(255),
-    statut VARCHAR(20) NOT NULL DEFAULT 'actif',
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-    modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND niveau_acces = 'standard'`);
-
-  console.log("→ référentiel Visite Client");
-  await ensureVisiteClient((sql, params) => client.query(sql, params), false);
-
-  // Les données de démonstration (dossiers fictifs, études de recette, mot de
-  // passe connu ChangezMoi2026!) ne se chargent QUE sur demande explicite —
-  // jamais par défaut, y compris quand NODE_ENV=production (cf. render.yaml
-  // pour l'environnement de test à distance, qui active SEED_DEMO=1).
-  if (process.env.SEED_DEMO === "1") {
-    // Mot de passe démo pour les comptes seed (test à distance Render)
-    const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
-    await client.query(
-      `UPDATE utilisateurs SET hash_mot_de_passe = $1
-       WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
-      [hash]
-    );
-    console.log("→ seed-demo (dossiers de démonstration)");
-    await seedDemo((sql, params) => client.query(sql, params), true);
-    console.log("→ seed-saas-complete (5 études de recette)");
-    await seedSaasComplete((sql, params) => client.query(sql, params), true);
-  } else {
-    console.log("→ SEED_DEMO non activé : données de démonstration non chargées.");
-  }
+  await migratePgCommon(client, bcrypt);
 
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
@@ -211,67 +170,9 @@ async function migratePgWithConnectionString(url, label = "postgres") {
   const client = new Client({ connectionString: url, ssl: pgSslOptions(url) });
   await connectWithRetry(client);
   console.log(`→ PostgreSQL (${label})`);
-  for (const file of ["db/schema.pg.sql", "db/seed.pg.sql"]) {
-    const sql = fs.readFileSync(path.join(ROOT, file), "utf8");
-    console.log(`→ ${file}`);
-    await client.query(sql);
-  }
-  await migrateV27Pg(client);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_active BOOLEAN NOT NULL DEFAULT false`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_method VARCHAR(20) NOT NULL DEFAULT 'totp'`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_secret TEXT`);
-  await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS mfa_backup_codes TEXT`);
-  await client.query(`CREATE TABLE IF NOT EXISTS security_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    etude_id UUID,
-    utilisateur UUID,
-    type_evenement VARCHAR(80) NOT NULL,
-    severite VARCHAR(20) NOT NULL DEFAULT 'info',
-    details JSONB,
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`CREATE TABLE IF NOT EXISTS saas_plans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(40) NOT NULL UNIQUE,
-    nom VARCHAR(120) NOT NULL,
-    prix_mensuel BIGINT NOT NULL DEFAULT 0,
-    prix_annuel BIGINT NOT NULL DEFAULT 0,
-    max_utilisateurs INT NOT NULL DEFAULT 10,
-    max_stockage_go INT NOT NULL DEFAULT 10,
-    actif BOOLEAN NOT NULL DEFAULT true,
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-    modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`CREATE TABLE IF NOT EXISTS saas_tenants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    etude_id UUID UNIQUE REFERENCES etudes(id) ON DELETE CASCADE,
-    nom_tenant VARCHAR(160) NOT NULL,
-    contact_nom VARCHAR(160),
-    contact_email VARCHAR(255),
-    statut VARCHAR(20) NOT NULL DEFAULT 'actif',
-    cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
-    modifie_le TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
-  await client.query(`UPDATE utilisateurs SET niveau_acces = 'administrateur' WHERE identifiant = 'notaire' AND niveau_acces = 'standard'`);
-  console.log("→ référentiel Visite Client");
-  await ensureVisiteClient((sql, params) => client.query(sql, params), false);
-  if (process.env.SEED_DEMO === "1") {
-    const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
-    await client.query(
-      `UPDATE utilisateurs SET hash_mot_de_passe = $1
-       WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`,
-      [hash]
-    );
-    console.log("→ seed-demo (dossiers de démonstration)");
-    await seedDemo((sql, params) => client.query(sql, params), true);
-    console.log("→ seed-saas-complete (5 études de recette)");
-    await seedSaasComplete((sql, params) => client.query(sql, params), true);
-  } else {
-    console.log("→ SEED_DEMO non activé : données de démonstration non chargées.");
-  }
+
+  await migratePgCommon(client, bcrypt);
+
   await client.end();
 }
 

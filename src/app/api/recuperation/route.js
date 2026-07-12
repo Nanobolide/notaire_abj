@@ -18,7 +18,7 @@ export async function POST(req) {
     if (isPg()) {
       // La RLS interdit de lire `utilisateurs` sans connaître l'étude au préalable :
       // la fonction SECURITY DEFINER fait le lookup + l'insertion de façon atomique
-      // (même mécanisme que auth_lookup pour la connexion, cf. db/schema.pg.sql).
+      // (même mécanisme que auth_lookup pour la connexion, cf. db/migrations/0003_row_level_security.sql).
       await pool.query(`SELECT demande_recuperation_creer($1, $2)`, [identifiant.trim(), code]);
     } else {
       const { rows } = await pool.query(
