@@ -91,7 +91,6 @@ export async function query(sql, params = []) {
   return isPg ? pgQuery(sql, params) : sqliteQuery(sql, params);
 }
 
-/** Exécute `fn(client)` dans une transaction (RLS armée sur PostgreSQL). */
 export async function withTenant(etudeId, fn) {
   const client = { etudeId, query };
   if (isPg) {
@@ -114,6 +113,35 @@ export async function withTenant(etudeId, fn) {
   getSqlite().exec("BEGIN");
   try {
     const result = await fn(client);
+    getSqlite().exec("COMMIT");
+    return result;
+  } catch (err) {
+    getSqlite().exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/** Transaction globale (hors tenant) — annonces plateforme, etc. */
+export async function withTransaction(fn) {
+  if (isPg) {
+    if (!pgPool) pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: pgSsl() });
+    const c = await pgPool.connect();
+    try {
+      await c.query("BEGIN");
+      const wrapped = { query: (sql, params) => c.query(sql, params) };
+      const result = await fn(wrapped);
+      await c.query("COMMIT");
+      return result;
+    } catch (err) {
+      await c.query("ROLLBACK");
+      throw err;
+    } finally {
+      c.release();
+    }
+  }
+  getSqlite().exec("BEGIN");
+  try {
+    const result = await fn({ query: sqliteQuery });
     getSqlite().exec("COMMIT");
     return result;
   } catch (err) {
@@ -231,7 +259,7 @@ export async function purgerCorbeilleExpiree(etudeId) {
     `DELETE FROM appels_courriers WHERE etude_id = $1 AND supprime_le < datetime('now', '-30 days')`, [etudeId]);
 }
 
-const db = { query, withTenant, newId, audit, securityEvent, etatCompte, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
+const db = { query, withTenant, withTransaction, newId, audit, securityEvent, etatCompte, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
 export const TenantResolver = { resolveTenantConnectionString };
 export const ConnectionManager = { poolForTenant };
 export const pool = db;

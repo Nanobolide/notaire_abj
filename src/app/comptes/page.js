@@ -14,6 +14,7 @@ const NIVEAUX = [
   { v: "notaire_salarie", t: "Notaire salarié", d: "Tout, sauf les comptes et les paramètres", couleur: "#2E7D32", fond: "#EDF3EE" },
   { v: "comptable",       t: "Comptable",       d: "Comme un rédacteur, plus le volet financier", couleur: "#8A6D1F", fond: "#FBF6E9" },
   { v: "standard",        t: "Standard",        d: "Les registres, aucun montant", couleur: "#5A6478", fond: "#F4F5F8" },
+  { v: "renseignement",   t: "Renseignement",   d: "Appels & courriers uniquement — juste pour renseigner", couleur: "#7A5AA0", fond: "#F2ECF7" },
 ];
 
 const NIVEAU_SUGGERE = {

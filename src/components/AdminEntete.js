@@ -12,6 +12,7 @@ const LIENS = [
   { href: "/admin/factures", label: "Factures" },
   { href: "/admin/support", label: "Support" },
   { href: "/admin/notifications", label: "Notifications" },
+  { href: "/admin/plateforme", label: "Forfaits & annonces" },
   { href: "/admin/parametres", label: "Paramètres" },
 ];
 

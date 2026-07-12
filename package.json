@@ -1,6 +1,6 @@
 {
   "name": "notaria-saas",
-  "version": "0.2.0",
+  "version": "3.5.0",
   "private": true,
   "description": "Gestion interne cabinet notarial — étude Me KOUASSI",
   "engines": {
@@ -13,6 +13,7 @@
     "start": "next start",
     "db:migrate": "node scripts/migrate.js",
     "migrate": "node scripts/migrate.js",
+    "db:reset-passwords": "node scripts/reset-demo-passwords.js",
     "db:seed-demo": "node scripts/migrate.js",
     "db:init": "node scripts/migrate.js",
     "db:verify": "node scripts/verify-db.js",

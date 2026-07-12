@@ -1,9 +1,36 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Entete from "@/components/Entete";
 import { lireJson } from "@/lib/http";
 
 export default function Parametres() {
+  const fichierRef = useRef(null);
+  const [apercu, setApercu] = useState(null);
+  const [importInfo, setImportInfo] = useState("");
+  const [importErr, setImportErr] = useState("");
+  const [fichierChoisi, setFichierChoisi] = useState(null);
+
+  const analyserFichier = async (f) => {
+    setImportErr(""); setImportInfo(""); setApercu(null);
+    if (!f) return;
+    setFichierChoisi(f);
+    const fd = new FormData(); fd.append("fichier", f);
+    const rep = await fetch("/api/import-actes?etape=apercu", { method: "POST", body: fd });
+    const d = await rep.json();
+    if (!rep.ok) { setImportErr(d.erreur || "Fichier illisible."); return; }
+    setApercu(d);
+  };
+  const confirmerImport = async () => {
+    if (!fichierChoisi) return;
+    setImportErr(""); setImportInfo("");
+    const fd = new FormData(); fd.append("fichier", fichierChoisi);
+    const rep = await fetch("/api/import-actes?etape=confirmer", { method: "POST", body: fd });
+    const d = await rep.json();
+    if (!rep.ok) { setImportErr(d.erreur || "Import impossible."); return; }
+    setApercu(null); setFichierChoisi(null);
+    if (fichierRef.current) fichierRef.current.value = "";
+    setImportInfo(`${d.importees} dossier(s) importé(s).` + (d.ignorees ? ` ${d.ignorees} déjà présent(s), ignoré(s).` : ""));
+  };
   const [tva, setTva] = useState("18");
   const [p, setP] = useState(null);
   const [erreur, setErreur] = useState("");
@@ -142,6 +169,50 @@ export default function Parametres() {
             </label>
             <button className="bouton" onClick={enregistrerTva}>Enregistrer le taux</button>
           </div>
+        </div>
+
+        <div className="carte">
+          <h1 style={{ fontSize: 15 }}>Importer des dossiers depuis Excel</h1>
+          <p className="sous-titre">Pour reprendre les anciens dossiers d'une étude sans tout ressaisir.
+            Téléchargez le modèle, remplissez-le, puis importez-le. Un aperçu vous est montré avant tout enregistrement.
+            Les dossiers déjà présents ne sont jamais écrasés.</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <a className="bouton secondaire" href="/api/import-actes/modele">⬇ Télécharger le modèle Excel</a>
+            <input ref={fichierRef} type="file" accept=".xlsx"
+                   onChange={(e) => analyserFichier(e.target.files?.[0])} style={{ fontSize: 13 }} />
+          </div>
+          {importErr && <div className="erreur" style={{ marginTop: 10 }}>{importErr}</div>}
+          {importInfo && <p className="sous-titre" style={{ color: "#2E7D32", fontWeight: 600, marginTop: 10 }}>{importInfo}</p>}
+          {apercu && (
+            <div style={{ marginTop: 12, background: "#F7F9FC", borderRadius: 8, padding: 12 }}>
+              <p style={{ fontSize: 13, margin: "0 0 8px" }}>
+                <strong>{apercu.valides}</strong> dossier(s) prêt(s) à importer sur {apercu.total} ligne(s) lue(s).
+              </p>
+              {apercu.anomalies?.length > 0 && (
+                <ul style={{ fontSize: 12, color: "#B03030", margin: "0 0 8px", paddingLeft: 18 }}>
+                  {apercu.anomalies.slice(0, 6).map((a, i) => <li key={i}>{a}</li>)}
+                  {apercu.anomalies.length > 6 && <li>… et {apercu.anomalies.length - 6} autre(s).</li>}
+                </ul>
+              )}
+              {apercu.apercu?.length > 0 && (
+                <table className="table-comptes" style={{ fontSize: 12 }}>
+                  <thead><tr><th>N° minute</th><th>Client</th><th>Nature</th><th>Total frais</th><th>Versé</th></tr></thead>
+                  <tbody>
+                    {apercu.apercu.map((l, i) => (
+                      <tr key={i}><td>{l.numero_minute}</td><td>{l.client}</td><td>{l.nature_acte || "—"}</td>
+                        <td>{Number(l.honoraires_totaux).toLocaleString("fr-FR")}</td>
+                        <td>{Number(l.montant_regle).toLocaleString("fr-FR")}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p style={{ marginTop: 10 }}>
+                <button className="bouton" onClick={confirmerImport} disabled={apercu.valides === 0}>
+                  Confirmer l'import de {apercu.valides} dossier(s)
+                </button>
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </>
