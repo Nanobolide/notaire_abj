@@ -23,6 +23,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "exceljs": "^4.4.0",
+    "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.2",
     "next": "14.2.35",
     "otplib": "^13.4.1",

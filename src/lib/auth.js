@@ -1,23 +1,11 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { etatCompte } from "@/lib/db";
+import { loadJwtKeyConfig } from "@/lib/jwt-keys";
 
 const COOKIE = "notaria_session";
 const DUREE_SESSION = 60 * 30; // 30 min — postes partagés à l'accueil
 const DEFAULT_STEPUP_WINDOW_MINUTES = 15;
-
-function loadJwtKeyConfig() {
-  const fallback = process.env.JWT_SECRET;
-  const raw = process.env.JWT_SECRETS_JSON;
-  if (!raw) return { activeKid: "legacy", keys: { legacy: fallback } };
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed?.active || !parsed?.keys?.[parsed.active]) throw new Error("invalid keys");
-    return { activeKid: parsed.active, keys: parsed.keys };
-  } catch {
-    return { activeKid: "legacy", keys: { legacy: fallback } };
-  }
-}
 
 function signWithActiveKey(payload, expiresIn) {
   const { activeKid, keys } = loadJwtKeyConfig();
