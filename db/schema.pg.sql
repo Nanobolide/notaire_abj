@@ -414,14 +414,20 @@ END $$;
 -- ligne d'un autre tenant, même en cas de bug applicatif (défense en profondeur).
 --
 -- Rôle applicatif NON superuser, sans BYPASSRLS : l'application DOIT se connecter
--- avec ce rôle (DATABASE_URL). Le mot de passe ci-dessous est un PLACEHOLDER — à
--- changer immédiatement après la première exécution :
---   ALTER ROLE notaria_app PASSWORD '<mot de passe fort généré>';
--- Les migrations, elles, doivent utiliser ADMIN_DATABASE_URL (rôle propriétaire du
--- schéma, avec BYPASSRLS — cf. procédure de déploiement).
+-- avec ce rôle (DATABASE_URL).
+--
+-- Bootstrap MANUEL, une seule fois par base, par un DBA (volontairement PAS fait
+-- par cette migration : la créer ici exigerait de donner CREATEROLE au rôle qui
+-- joue les migrations, un privilège plus large que ce dont schema.pg.sql a besoin) :
+--   CREATE ROLE notaria_app LOGIN PASSWORD '<mot de passe fort généré>';
+--   ALTER ROLE <role propriétaire du schéma> BYPASSRLS;  -- ex. notaria_user
+-- Puis renseigner DATABASE_URL=...notaria_app... et ADMIN_DATABASE_URL=...<propriétaire>...
+-- (cf. .env.example). Cette migration échoue explicitement si l'étape a été oubliée.
 DO $$ BEGIN
-  CREATE ROLE notaria_app LOGIN PASSWORD 'changez-moi-immediatement';
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'notaria_app') THEN
+    RAISE EXCEPTION 'Rôle notaria_app introuvable — bootstrap DBA requis, voir le commentaire ci-dessus (schema.pg.sql).';
+  END IF;
+END $$;
 
 DO $$
 DECLARE t TEXT;
