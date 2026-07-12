@@ -46,6 +46,63 @@ async function ensureVisiteClient(queryFn, sqlite = false) {
   }
 }
 
+const PROGRESSION_V35 = [
+  "Recensement des informations", "Paiement", "Formalité antérieure",
+  "Rédaction", "Signature", "Préparation des formalités",
+  "Dépôt des formalités", "Retrait de la minute", "Réception de l'état foncier",
+  "Réception du CMPF", "Transmission client", "Terminé", "Annulé",
+];
+const NATURE_ACTE_V35 = [
+  "Société", "Bail", "Vente", "Achat", "Donation", "Succession",
+  "Ouverture de Crédit", "Mainlevée d'Hypothèque", "Procuration", "Contrat de Mariage",
+  "Légalisation", "Adoption", "Reconnaissance d'Enfant Naturel", "Dation en Paiement", "Autres",
+];
+
+async function ensureReferentielsV35(queryFn, sqlite = false) {
+  const { rows: etudes } = await queryFn(`SELECT id FROM etudes`);
+  for (const { id: etudeId } of etudes) {
+    for (const listes of [
+      ["progression", PROGRESSION_V35],
+      ["nature_acte", NATURE_ACTE_V35],
+    ]) {
+      const [type_liste, valeurs] = listes;
+      for (let i = 0; i < valeurs.length; i++) {
+        const valeur = valeurs[i];
+        const ordre = i + 1;
+        const found = await queryFn(
+          `SELECT 1 AS ok FROM referentiels WHERE etude_id = $1 AND type_liste = $2 AND valeur = $3 LIMIT 1`,
+          [etudeId, type_liste, valeur]
+        );
+        if (found.rows[0]) continue;
+        if (sqlite) {
+          await queryFn(
+            `INSERT INTO referentiels (id, etude_id, type_liste, valeur, ordre) VALUES ($1,$2,$3,$4,$5)`,
+            [crypto.randomUUID(), etudeId, type_liste, valeur, ordre]
+          );
+        } else {
+          await queryFn(
+            `INSERT INTO referentiels (etude_id, type_liste, valeur, ordre) VALUES ($1,$2,$3,$4)`,
+            [etudeId, type_liste, valeur, ordre]
+          );
+        }
+      }
+    }
+  }
+}
+
+async function resetDemoPasswords(queryFn) {
+  const bcrypt = require("bcryptjs");
+  const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
+  await queryFn(
+    `UPDATE utilisateurs SET hash_mot_de_passe = $1, echecs_connexion = 0, verrouille_jusqua = NULL
+     WHERE role = 'super_admin'
+        OR identifiant IN ('notaire','secretariat','clerc1','accueil')
+        OR identifiant LIKE '%.notaire' OR identifiant LIKE '%.secretariat'
+        OR identifiant LIKE '%.clerc1' OR identifiant LIKE '%.comptable'`,
+    [hash]
+  );
+}
+
 async function migrateV27Pg(client) {
   for (const [col, def] of ACTES_COLS_PG)
     await client.query(`ALTER TABLE actes ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -94,6 +151,107 @@ function migrateV27Sqlite(db) {
   )`);
 }
 
+const REGLAGES_DEFAUT = [
+  ["offres_actives", "false"],
+  ["forfaits_restrictions_actives", "false"],
+  ["annonces_visibles_par", "tous"],
+];
+
+async function migrateV35Pg(client) {
+  await client.query(`ALTER TABLE etudes ADD COLUMN IF NOT EXISTS forfait VARCHAR(20) NOT NULL DEFAULT 'essentiel'`);
+  await client.query(`CREATE TABLE IF NOT EXISTS reglages_plateforme (
+    cle VARCHAR(60) PRIMARY KEY,
+    valeur TEXT NOT NULL,
+    maj_le TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  for (const [cle, valeur] of REGLAGES_DEFAUT) {
+    await client.query(`INSERT INTO reglages_plateforme (cle, valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING`, [cle, valeur]);
+  }
+  await client.query(`CREATE TABLE IF NOT EXISTS annonces (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    titre VARCHAR(160) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(24) NOT NULL DEFAULT 'information',
+    bien_ville VARCHAR(120),
+    bien_prix BIGINT,
+    contact_etude VARCHAR(160),
+    cible VARCHAR(20) NOT NULL DEFAULT 'toutes',
+    forfait_cible VARCHAR(20),
+    cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+    cree_par UUID
+  )`);
+  await client.query(`CREATE TABLE IF NOT EXISTS annonce_etudes (
+    annonce_id UUID NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+    etude_id UUID NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+    PRIMARY KEY (annonce_id, etude_id)
+  )`);
+  await client.query(`CREATE TABLE IF NOT EXISTS annonce_lectures (
+    annonce_id UUID NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+    etude_id UUID NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+    lu_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (annonce_id, etude_id)
+  )`);
+  await client.query(`
+    DO $$ DECLARE c name;
+    BEGIN
+      SELECT conname INTO c FROM pg_constraint
+      WHERE conrelid = 'utilisateurs'::regclass AND contype = 'c'
+        AND pg_get_constraintdef(oid) LIKE '%niveau_acces%';
+      IF c IS NOT NULL THEN EXECUTE 'ALTER TABLE utilisateurs DROP CONSTRAINT ' || quote_ident(c);
+      END IF;
+    END $$`);
+  await client.query(`ALTER TABLE utilisateurs ADD CONSTRAINT utilisateurs_niveau_acces_check
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard','renseignement'))`);
+}
+
+function migrateV35Sqlite(db) {
+  try { db.exec(`ALTER TABLE etudes ADD COLUMN forfait TEXT NOT NULL DEFAULT 'essentiel'`); } catch {}
+  db.exec(`CREATE TABLE IF NOT EXISTS reglages_plateforme (
+    cle TEXT PRIMARY KEY, valeur TEXT NOT NULL, maj_le TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  for (const [cle, valeur] of REGLAGES_DEFAUT) {
+    db.prepare(`INSERT OR IGNORE INTO reglages_plateforme (cle, valeur) VALUES (?,?)`).run(cle, valeur);
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS annonces (
+    id TEXT PRIMARY KEY, titre TEXT NOT NULL, message TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'information', bien_ville TEXT, bien_prix INTEGER,
+    contact_etude TEXT, cible TEXT NOT NULL DEFAULT 'toutes', forfait_cible TEXT,
+    cree_le TEXT NOT NULL DEFAULT (datetime('now')), cree_par TEXT
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS annonce_etudes (
+    annonce_id TEXT NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+    etude_id TEXT NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+    PRIMARY KEY (annonce_id, etude_id)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS annonce_lectures (
+    annonce_id TEXT NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+    etude_id TEXT NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+    lu_le TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (annonce_id, etude_id)
+  )`);
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='utilisateurs'`).get();
+  if (row?.sql && !row.sql.includes("'renseignement'")) {
+    db.exec("PRAGMA foreign_keys=OFF");
+    db.exec(`CREATE TABLE utilisateurs_v35 (
+      id TEXT PRIMARY KEY, etude_id TEXT NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('super_admin','admin_etude','collaborateur')),
+      identifiant TEXT NOT NULL, nom_affiche TEXT NOT NULL, fonction TEXT, email_rattachement TEXT,
+      hash_mot_de_passe TEXT NOT NULL, doit_changer_mdp INTEGER NOT NULL DEFAULT 1,
+      actif INTEGER NOT NULL DEFAULT 1, echecs_connexion INTEGER NOT NULL DEFAULT 0,
+      verrouille_jusqua TEXT, derniere_activite TEXT, nom_complet TEXT,
+      niveau_acces TEXT NOT NULL DEFAULT 'standard'
+        CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard','renseignement')),
+      mfa_active INTEGER NOT NULL DEFAULT 0, mfa_method TEXT NOT NULL DEFAULT 'totp',
+      mfa_secret TEXT, mfa_backup_codes TEXT,
+      cree_le TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (identifiant)
+    )`);
+    db.exec(`INSERT INTO utilisateurs_v35 SELECT * FROM utilisateurs`);
+    db.exec(`DROP TABLE utilisateurs`);
+    db.exec(`ALTER TABLE utilisateurs_v35 RENAME TO utilisateurs`);
+    db.exec("PRAGMA foreign_keys=ON");
+  }
+}
+
 async function connectWithRetry(client, attempts = 5) {
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -131,6 +289,8 @@ async function migratePg() {
   }
 
   await migrateV27Pg(client);
+  console.log("→ migration v3.5");
+  await migrateV35Pg(client);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
@@ -181,10 +341,14 @@ async function migratePg() {
 
   console.log("→ référentiel Visite Client");
   await ensureVisiteClient((sql, params) => client.query(sql, params), false);
+  console.log("→ référentiels v3.5 (progression, nature)");
+  await ensureReferentielsV35((sql, params) => client.query(sql, params), false);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo((sql, params) => client.query(sql, params), true);
   console.log("→ seed-saas-complete (5 études de recette)");
   await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  console.log("→ mots de passe démo");
+  await resetDemoPasswords((sql, params) => client.query(sql, params));
 
   await client.end();
   console.log("\n✅ Migration PostgreSQL terminée.");
@@ -203,6 +367,8 @@ async function migratePgWithConnectionString(url, label = "postgres") {
     await client.query(sql);
   }
   await migrateV27Pg(client);
+  console.log("→ migration v3.5");
+  await migrateV35Pg(client);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS derniere_activite TIMESTAMPTZ`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS nom_complet VARCHAR`);
   await client.query(`ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS niveau_acces VARCHAR NOT NULL DEFAULT 'standard'`);
@@ -250,10 +416,14 @@ async function migratePgWithConnectionString(url, label = "postgres") {
   );
   console.log("→ référentiel Visite Client");
   await ensureVisiteClient((sql, params) => client.query(sql, params), false);
+  console.log("→ référentiels v3.5 (progression, nature)");
+  await ensureReferentielsV35((sql, params) => client.query(sql, params), false);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo((sql, params) => client.query(sql, params), true);
   console.log("→ seed-saas-complete (5 études de recette)");
   await seedSaasComplete((sql, params) => client.query(sql, params), true);
+  console.log("→ mots de passe démo");
+  await resetDemoPasswords((sql, params) => client.query(sql, params));
   await client.end();
 }
 
@@ -290,6 +460,8 @@ async function migrateSqliteAsync() {
     db.exec(fs.readFileSync(path.join(ROOT, file), "utf8"));
   }
   migrateV27Sqlite(db);
+  console.log("→ migration v3.5");
+  migrateV35Sqlite(db);
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN derniere_activite TEXT"); } catch {}
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN nom_complet TEXT"); } catch {}
   try { db.exec("ALTER TABLE utilisateurs ADD COLUMN niveau_acces TEXT NOT NULL DEFAULT 'standard'"); } catch {}
@@ -333,7 +505,8 @@ async function migrateSqliteAsync() {
   const hash = bcrypt.hashSync("ChangezMoi2026!", 10);
   db.prepare(
     `UPDATE utilisateurs SET hash_mot_de_passe = ?
-     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')`
+     WHERE identifiant IN ('notaire','secretariat','clerc1','accueil')
+        OR role = 'super_admin'`
   ).run(hash);
 
   const queryFn = (sql, params = []) => {
@@ -352,10 +525,14 @@ async function migrateSqliteAsync() {
   };
   console.log("→ référentiel Visite Client");
   await ensureVisiteClient(queryFn, true);
+  console.log("→ référentiels v3.5 (progression, nature)");
+  await ensureReferentielsV35(queryFn, true);
   console.log("→ seed-demo (dossiers de démonstration)");
   await seedDemo(queryFn, false);
   console.log("→ seed-saas-complete (5 études de recette)");
   await seedSaasComplete(queryFn, false);
+  console.log("→ mots de passe démo");
+  await resetDemoPasswords(queryFn);
 
   if (!fs.existsSync(path.join(ROOT, ".env"))
     && !process.env.JWT_SECRET && !process.env.RENDER && process.env.NODE_ENV !== "production") {

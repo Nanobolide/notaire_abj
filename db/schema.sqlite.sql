@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS etudes (
   email_gmail_notaire TEXT UNIQUE,
   email_gmail_partage TEXT,
   statut TEXT NOT NULL DEFAULT 'active' CHECK (statut IN ('active','desactivee')),
+  forfait TEXT NOT NULL DEFAULT 'essentiel'
+    CHECK (forfait IN ('ami','essentiel','pro','pro_max')),
   cree_le TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   derniere_activite TEXT,
   nom_complet TEXT,
   niveau_acces TEXT NOT NULL DEFAULT 'standard'
-    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard')),
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard','renseignement')),
   mfa_active INTEGER NOT NULL DEFAULT 0,
   mfa_method TEXT NOT NULL DEFAULT 'totp',
   mfa_secret TEXT,
@@ -294,4 +296,39 @@ CREATE TABLE IF NOT EXISTS saas_global_settings (
   valeur TEXT NOT NULL,
   modifie_le TEXT NOT NULL DEFAULT (datetime('now')),
   modifie_par TEXT REFERENCES utilisateurs(id)
+);
+
+CREATE TABLE IF NOT EXISTS reglages_plateforme (
+  cle TEXT PRIMARY KEY,
+  valeur TEXT NOT NULL,
+  maj_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS annonces (
+  id TEXT PRIMARY KEY,
+  titre TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'information'
+    CHECK (type IN ('information','mise_a_jour','maintenance','proposition_vente','proposition_achat')),
+  bien_ville TEXT,
+  bien_prix INTEGER,
+  contact_etude TEXT,
+  cible TEXT NOT NULL DEFAULT 'toutes'
+    CHECK (cible IN ('toutes','selection','forfait')),
+  forfait_cible TEXT,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  cree_par TEXT
+);
+
+CREATE TABLE IF NOT EXISTS annonce_etudes (
+  annonce_id TEXT NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+  etude_id TEXT NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+  PRIMARY KEY (annonce_id, etude_id)
+);
+
+CREATE TABLE IF NOT EXISTS annonce_lectures (
+  annonce_id TEXT NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+  etude_id TEXT NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+  lu_le TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (annonce_id, etude_id)
 );

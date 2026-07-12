@@ -8,7 +8,7 @@ import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
 import { couleurActe, joursEcoules, respectEcheance, resteAPayer, formatFcfa } from "@/lib/regles";
 
 const VIDE = { numero_minute: "", numero_dossier: "", nature_acte: "", complexite: "Simple",
-  responsable: "", conservation_fonciere: "", progression: "Rédaction",
+  responsable: "", conservation_fonciere: "", progression: "Recensement des informations",
   valeur_acte: "", honoraires_totaux: "", montant_regle: "", statut_paiement: "En attente",
   emoluments: "", droits_etat: "", debours: "",
   autres_depenses: "", autres_depenses_motif: "",
@@ -46,6 +46,7 @@ function Actes() {
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
   const [journal, setJournal] = useState(null);
+  const [autorise, setAutorise] = useState(null);
 
   const charger = useCallback(async () => {
     const q = new URLSearchParams(Object.entries(filtres).filter(([, v]) => v));
@@ -66,8 +67,10 @@ function Actes() {
       setPeutFormalites(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.fonction === "Formaliste");
       const REDACTEURS = ["Notaire principal","Notaire salarié","Clerc de 1ère catégorie","Clerc 2","Clerc 3","Clerc 4","Clerc 5"];
       setPeutPrevision(["administrateur","notaire_salarie","comptable"].includes(n) || REDACTEURS.includes(d.fonction));
+      const SANS_ACTES = ["Accueil", "Archiviste"];
+      setAutorise(!SANS_ACTES.includes(d.fonction) && n !== "renseignement");
     }); }, []);
-  useEffect(() => { charger(); }, [charger]);
+  useEffect(() => { if (autorise) charger(); }, [charger, autorise]);
 
   const maj = (ch) => (e) => setForm({ ...form, [ch]: e.target.value });
   const majNature = (e) => {
@@ -88,7 +91,7 @@ function Actes() {
       numero_minute: a.numero_minute || "", numero_dossier: a.numero_dossier || "",
       nature_acte: a.nature_acte || "", complexite: a.complexite || "Simple",
       responsable: a.responsable || "", conservation_fonciere: a.conservation_fonciere || "",
-      progression: a.progression || "Rédaction",
+      progression: a.progression || "Recensement des informations",
       valeur_acte: a.valeur_acte ?? "", honoraires_totaux: a.honoraires_totaux ?? "",
       montant_regle: a.montant_regle ?? "", statut_paiement: a.statut_paiement || "En attente",
       parties: a.parties ? a.parties.split(" / ") : ["", ""],
@@ -183,6 +186,19 @@ function Actes() {
       {(refs[liste] || []).map((v) => <option key={v} value={v}>{v}</option>)}
     </select>
   );
+
+  if (autorise === null) {
+    return (<><Entete /><main className="page"><p className="sous-titre">Chargement…</p></main></>);
+  }
+  if (autorise === false) {
+    return (<><Entete /><main className="page">
+      <div className="carte" style={{ borderColor: "#E0B4B4", background: "#FDF3F3" }}>
+        <h1 style={{ fontSize: 15, color: "#B03030" }}>Accès non autorisé</h1>
+        <p className="sous-titre">Votre fonction n'a pas accès au registre des actes. Vous pouvez utiliser le registre des appels et courriers.</p>
+        <a className="bouton" href="/appels">Aller aux Appels & Courriers</a>
+      </div>
+    </main></>);
+  }
 
   return (
     <>

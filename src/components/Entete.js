@@ -2,8 +2,10 @@
 import { useEffect, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import Cloche from "./Cloche";
 
 export default function Entete() {
+  const [offresVisibles, setOffresVisibles] = useState(false);
   const chemin = usePathname();
   const routeur = useRouter();
   const [session, setSession] = useState(null);
@@ -28,12 +30,18 @@ export default function Entete() {
     await fetch("/api/auth/logout", { method: "POST" });
     routeur.push("/connexion");
   };
+  useEffect(() => {
+    fetch("/api/offres").then((r) => r.json())
+      .then((d) => setOffresVisibles(!!(d && d.actif && d.autorise)))
+      .catch(() => {});
+  }, []);
+
   const lien = (href, texte) => (
     <Link href={href} className={chemin === href ? "actif" : ""}>{texte}</Link>
   );
   const niveau = session?.niveauAcces || (session?.role === "admin_etude" ? "administrateur" : "standard");
   const admin = niveau === "administrateur" || session?.role === "super_admin";
-  const voitFinancier = ["administrateur", "notaire_salarie", "comptable"].includes(niveau);
+  const sansActes = session?.fonction === "Accueil" || session?.fonction === "Archiviste" || niveau === "renseignement";
   const roleLisible = { admin_etude: "Notaire", super_admin: "Super-Admin", collaborateur: session?.fonction || "Collaborateur" }[session?.role] || "";
 
   const item = (href, ic, titre, desc) => (
@@ -55,9 +63,11 @@ export default function Entete() {
       </div>
       <nav>
         {lien("/tableau-de-bord", "Tableau de bord")}
-        {session?.fonction !== "Accueil" && lien("/actes", "Actes & Minutes")}
+        {!sansActes && lien("/actes", "Actes & Minutes")}
         {lien("/appels", "Appels & Courriers")}
+        {offresVisibles && lien("/offres", "Offres")}
       </nav>
+      <Cloche actif={!!session?.etudeNom} />
       <div className="zone-param" ref={ref}>
         <button className="param-btn" onClick={() => setMenuOuvert(!menuOuvert)}>⚙ Paramètres ▾</button>
         {menuOuvert && (

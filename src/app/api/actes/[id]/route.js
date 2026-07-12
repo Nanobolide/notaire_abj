@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { exigerSession, exigerNotaire } from "@/lib/auth";
-import { filtrerActe, voitMontants, saisitDepenses, modifieFormalites, saisitPrevision, plafondReglement } from "@/lib/acces";
+import { filtrerActe, voitMontants, saisitDepenses, modifieFormalites, saisitPrevision, plafondReglement, voitRegistreActes } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
 
 const CHAMPS = ["numero_minute","numero_dossier","date_ouverture","date_echeance","nature_acte",
@@ -15,6 +15,7 @@ export async function PATCH(req, { params }) {
   let s3 = null;
   try {
     const s = await exigerSession(); s3 = s;
+    if (!voitRegistreActes(s)) { const e = new Error("Accès refusé au registre des actes."); e.status = 403; throw e; }
     const d = await req.json();
     if (!saisitPrevision(s))
       for (const ch of ["valeur_acte","honoraires_totaux","montant_regle","statut_paiement"]) delete d[ch];

@@ -152,10 +152,14 @@ async function seedSaasComplete(queryFn, isPg) {
         );
       } else {
         await queryFn(
-          `INSERT OR IGNORE INTO utilisateurs (id, etude_id, role, identifiant, nom_affiche, nom_complet, fonction, email_rattachement,
+          `INSERT INTO utilisateurs (id, etude_id, role, identifiant, nom_affiche, nom_complet, fonction, email_rattachement,
              hash_mot_de_passe, doit_changer_mdp, actif, niveau_acces)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,1,$10)`,
-          [isPg ? user.id : randomUUID(), etude.id, user.role, user.identifiant, user.nom_affiche, user.nom_complet, user.fonction, user.email, HASH, user.niveau]
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,1,$10)
+           ON CONFLICT (identifiant) DO UPDATE SET
+             nom_affiche = excluded.nom_affiche, nom_complet = excluded.nom_complet, fonction = excluded.fonction,
+             email_rattachement = excluded.email_rattachement, niveau_acces = excluded.niveau_acces,
+             hash_mot_de_passe = excluded.hash_mot_de_passe`,
+          [randomUUID(), etude.id, user.role, user.identifiant, user.nom_affiche, user.nom_complet, user.fonction, user.email, HASH, user.niveau]
         );
       }
     }

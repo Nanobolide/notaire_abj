@@ -1,8 +1,8 @@
 /**
- * Matrice centralisee des droits NOTARIA (V3 + socle v3.2).
+ * Matrice centralisee des droits NOTARIA (socle v3.5).
  * Toute autorisation doit passer par ce module.
  */
-export const NIVEAUX = ["administrateur", "notaire_salarie", "comptable", "standard"];
+export const NIVEAUX = ["administrateur", "notaire_salarie", "comptable", "standard", "renseignement"];
 
 export const FONCTIONS = [
   "Notaire principal", "Notaire salarié", "Clerc de 1ère catégorie",
@@ -25,9 +25,13 @@ export const estNotaire = (s) => ["administrateur", "notaire_salarie"].includes(
 export const estComptable = (s) => niveau(s) === "comptable";
 export const estFormaliste = (s) => s?.fonction === "Formaliste";
 export const estAccueil = (s) => s?.fonction === "Accueil";
+/** Niveau « Renseignement » : registre appels/courriers uniquement. */
+export const estRenseignement = (s) => niveau(s) === "renseignement";
 
 export const voitMontants = (s) => estNotaire(s) || estComptable(s);
-export const voitRegistreActes = (s) => !estAccueil(s);
+/** C4 — Accueil, Archiviste et niveau Renseignement n'ouvrent pas les actes. */
+export const voitRegistreActes = (s) => !estAccueil(s) && !estRenseignement(s)
+  && s?.fonction !== "Archiviste";
 
 /** P2.5 — Le Comptable accède aussi au registre des appels. */
 export const voitRegistreAppels = (s) => true;
