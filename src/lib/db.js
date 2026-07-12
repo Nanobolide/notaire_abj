@@ -250,7 +250,5 @@ export async function purgerCorbeilleExpiree(etudeId) {
 }
 
 const db = { query, withTenant, newId, audit, securityEvent, etatCompte, verifierCompteActif, deconnecterPresence, purgerCorbeilleExpiree };
-export const TenantResolver = { resolveTenantConnectionString };
-export const ConnectionManager = { poolForTenant };
 export const pool = db;
 export default db;
