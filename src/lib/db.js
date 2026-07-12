@@ -87,6 +87,22 @@ export function newId() {
   return randomUUID();
 }
 
+const fallbacksSignales = new Set();
+/**
+ * Signale UNE FOIS (pas à chaque requête) le passage en mode dégradé quand une
+ * fonction SECURITY DEFINER attendue est absente. Avant ce correctif, ces replis
+ * étaient totalement silencieux — voir instrumentation.js pour le diagnostic au
+ * démarrage, qui aurait dû détecter ce cas avant même la première requête.
+ * Sous RLS forcée, ce repli ne restaure PAS le comportement (les requêtes
+ * directes ne voient aucune ligne sans contexte tenant) : il documente juste
+ * l'échec au lieu de le masquer.
+ */
+export function signalerFallback(fonction, err) {
+  if (fallbacksSignales.has(fonction)) return;
+  fallbacksSignales.add(fonction);
+  console.error(`⚠️  [db] Fonction SQL "${fonction}" indisponible, repli dégradé (probablement sans effet sous RLS) : ${err.message}`);
+}
+
 export async function query(sql, params = []) {
   return isPg ? pgQuery(sql, params) : sqliteQuery(sql, params);
 }
@@ -160,8 +176,8 @@ export async function etatCompte(uid) {
       if (!r || r.ok !== true) return null;
       try { await query(`SELECT marquer_activite($1)`, [uid]); } catch {}
       return { niveauAcces: r.niveau_acces, fonction: r.fonction };
-    } catch {
-      // repli si fonction absente
+    } catch (err) {
+      signalerFallback("compte_etat", err);
     }
   }
   const nowSql = isPg ? "now()" : "datetime('now')";
@@ -189,8 +205,8 @@ export async function verifierCompteActif(uid) {
       const ok = rows[0]?.ok === true;
       if (ok) { try { await query(`SELECT marquer_activite($1)`, [uid]); } catch {} }
       return ok;
-    } catch {
-      // Schéma sans fonctions RLS : repli requête directe
+    } catch (err) {
+      signalerFallback("compte_est_actif", err);
     }
   }
   const nowSql = isPg ? "now()" : "datetime('now')";
@@ -211,14 +227,16 @@ export async function verifierCompteActif(uid) {
 
 export async function deconnecterPresence(uid) {
   if (isPg) {
-    try { await query(`SELECT deconnecter_presence($1)`, [uid]); return; } catch {}
+    try { await query(`SELECT deconnecter_presence($1)`, [uid]); return; }
+    catch (err) { signalerFallback("deconnecter_presence", err); }
   }
   await query(`UPDATE utilisateurs SET derniere_activite = NULL WHERE id = $1`, [uid]);
 }
 
 export async function purgerCorbeilleExpiree(etudeId) {
   if (isPg) {
-    try { await query(`SELECT purger_corbeille_expiree($1)`, [etudeId]); return; } catch {}
+    try { await query(`SELECT purger_corbeille_expiree($1)`, [etudeId]); return; }
+    catch (err) { signalerFallback("purger_corbeille_expiree", err); }
     await query(
       `DELETE FROM actes WHERE etude_id = $1 AND supprime_le < now() - interval '30 days'`, [etudeId]);
     await query(

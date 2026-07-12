@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import db from "@/lib/db";
+import db, { signalerFallback } from "@/lib/db";
 import { creerSession, creerMfaChallenge } from "@/lib/auth";
 import { isPg, actifClause, lockAccountSql } from "@/lib/dialect";
 
@@ -29,7 +29,8 @@ export async function POST(req) {
           );
           user = { ...user, ...(mfaRows[0] || {}) };
         }
-      } catch {
+      } catch (err) {
+        signalerFallback("auth_lookup", err);
         const { rows } = await db.query(selectUser, [identifiant]);
         user = rows[0];
       }
@@ -53,7 +54,8 @@ export async function POST(req) {
     if (isPg()) {
       try {
         await db.query(`SELECT auth_apres_tentative($1, $2)`, [user.id, ok]);
-      } catch {
+      } catch (err) {
+        signalerFallback("auth_apres_tentative", err);
         if (ok) {
           await db.query("UPDATE utilisateurs SET echecs_connexion = 0, verrouille_jusqua = NULL WHERE id = $1", [user.id]);
         } else {
