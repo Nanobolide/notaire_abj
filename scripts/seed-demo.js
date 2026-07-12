@@ -24,7 +24,7 @@ function nowSql(isPg) {
 }
 
 async function loadDemoData() {
-  const mod = await import(pathToFileURL(path.join(__dirname, "../src/lib/demo-data.js")).href);
+  const mod = await import(pathToFileURL(path.join(__dirname, "../src/lib/demo-data.mjs")).href);
   return { DEMO_ACTES: mod.DEMO_ACTES, DEMO_APPELS: mod.DEMO_APPELS };
 }
 
