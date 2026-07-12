@@ -7,13 +7,15 @@
 > aucune policy RLS, contrairement à `db/schema.sql` qui les définit mais n'était jamais
 > exécuté. Chaque section ci-dessous a un critère d'acceptation vérifiable.
 >
-> **Mise à jour 2026-07-12 (branche `brindou`)** : P0, P1, P3 complets et le P2 quasi
-> complet — tout vérifié en conditions réelles sur le serveur de test (login, isolation
-> croisée, console Super Admin, récupération de mot de passe, cookie forgé, session
-> glissante, migrations rejouées, sauvegarde restaurable). Seul point restant : le
-> découpage des pages monolithiques (#13), volontairement laissé pour une repasse avec
-> vérification visuelle dans le navigateur plutôt qu'en aveugle. Voir l'historique de
-> la branche pour le détail commit par commit.
+> **Mise à jour 2026-07-12 (branche `brindou`)** : P0, P1, P3 complets, P2 quasi complet
+> — tout vérifié en conditions réelles sur le serveur de test (login, isolation croisée,
+> console Super Admin, récupération de mot de passe, cookie forgé, session glissante,
+> migrations rejouées, sauvegarde restaurable). Seul reste : le découpage LOURD des
+> pages (#13 — composant Registre/Tableau, modales, hook de fetch commun), volontairement
+> laissé pour une repasse avec vérification visuelle dans un navigateur (indisponible
+> dans cet environnement CLI) plutôt qu'en aveugle. La partie mécanique et sans risque
+> (Pagination/Erreur) est faite. Voir l'historique de la branche pour le détail
+> commit par commit.
 
 ---
 
@@ -111,13 +113,18 @@
 
 ## P2 — Qualité de code / maintenabilité
 
-### 13. Découper les pages monolithiques — ⏳ NON FAIT (seul point restant)
-- `src/app/actes/page.js` (461 lignes), `comptes` (280), `appels` (254) : tout est
-  inline (état, fetch, tableau, modales). Extraire au minimum : un composant
-  Registre/Tableau paginé réutilisable, les modales, un hook de fetch avec gestion
-  d'erreur commune. Volontairement laissé de côté : gros refactor UI à haut risque
-  de régression visuelle, à faire avec repasse manuelle dans le navigateur (pas
-  seulement build+curl comme le reste de cette liste).
+### 13. Découper les pages monolithiques — PARTIEL
+- ✅ Fait (mécanique, zéro changement de comportement, vérifié build+SSR 200 sur les
+  3 pages) : `src/components/Pagination.js` et `src/components/Erreur.js` extraits,
+  utilisés par `actes`/`appels`/`comptes` (comptes n'a pas de pagination serveur).
+- ⏳ Reste à faire : le vrai découpage lourd (composant Registre/Tableau, modales,
+  hook de fetch commun) sur `actes/page.js` (toujours ~450 lignes), `appels` (~250),
+  `comptes` (~280). Volontairement NON fait dans cette passe : aucun outil de
+  vérification visuelle dans un navigateur n'était disponible dans cet
+  environnement CLI, et ce refactor-là est trop risqué pour être fait "à l'aveugle"
+  (formulaires + tableaux + modales, pas du JSX strictement dupliqué comme
+  Pagination/Erreur). À faire par quelqu'un avec accès navigateur, en testant
+  chaque page manuellement après extraction.
 
 ### 14. Trancher le sort du squelette DDD `src/modules/` — ✅ FAIT
 - Supprimé (5 fichiers README/contexts.md, zéro code, rien ne les référençait).
