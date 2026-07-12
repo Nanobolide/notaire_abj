@@ -76,6 +76,18 @@ export function couleurActe(acte, p = null) {
   return { fond: "#FFFFFF", nom: "blanc" };
 }
 
+/**
+ * Échéance par défaut d'un acte quand aucune n'est saisie : Succession 180 j,
+ * Simple 20 j, sinon (Complexe ou non renseigné) 30 j. Retourne une date
+ * "YYYY-MM-DD" à partir de la date d'ouverture (ou aujourd'hui si absente).
+ */
+export function echeanceParDefaut(natureActe, complexite, dateOuverture) {
+  const base = dateOuverture ? new Date(dateOuverture) : new Date();
+  const jours = natureActe === "Succession" ? 180 : complexite === "Simple" ? 20 : 30;
+  base.setDate(base.getDate() + jours);
+  return base.toISOString().slice(0, 10);
+}
+
 /** Respect de l'échéance : OK / ⚠ Dépassée (sauf Terminé/Annulé). */
 export function respectEcheance(acte) {
   if (acte.progression === "Terminé" || acte.progression === "Annulé") return "—";

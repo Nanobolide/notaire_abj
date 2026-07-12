@@ -18,7 +18,8 @@
     "db:verify": "node scripts/verify-db.js",
     "test:isolation": "node tests/isolation.js",
     "test:authz": "node tests/authz-matrix.js",
-    "test:security:smoke": "node tests/security-smoke.js"
+    "test:security:smoke": "node tests/security-smoke.js",
+    "test:regles": "node --test tests/regles-metier.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

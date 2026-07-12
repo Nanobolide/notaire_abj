@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exigerSession } from "@/lib/auth";
 import { voitRegistreActes, filtrerActe, voitMontants, saisitPrevision, plafondReglement } from "@/lib/acces";
+import { echeanceParDefaut } from "@/lib/regles";
 import { withTenant, audit, newId } from "@/lib/db";
 import { isPg, depuisMinutes, sqlPartiesSubquery } from "@/lib/dialect";
 
@@ -75,12 +76,8 @@ export async function POST(req) {
         return NextResponse.json({ doublon: true,
           message: `Un acte similaire existe déjà (${doublon.numero_minute}). Enregistrer quand même ?` }, { status: 409 });
     }
-    if (!d.date_echeance) {
-      const base = d.date_ouverture ? new Date(d.date_ouverture) : new Date();
-      const jours = d.nature_acte === "Succession" ? 180 : d.complexite === "Simple" ? 20 : 30;
-      base.setDate(base.getDate() + jours);
-      d.date_echeance = base.toISOString().slice(0, 10);
-    }
+    if (!d.date_echeance)
+      d.date_echeance = echeanceParDefaut(d.nature_acte, d.complexite, d.date_ouverture);
     const ligne = await withTenant(s.etudeId, async (c) => {
       const baseParams = [s.etudeId, d.numero_minute, d.numero_dossier || null, d.date_ouverture || null,
         d.date_echeance || null, d.nature_acte || null, d.complexite || null,

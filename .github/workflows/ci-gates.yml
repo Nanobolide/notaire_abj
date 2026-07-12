@@ -24,6 +24,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Business Rules (unit)
+        run: npm run test:regles
+
       - name: Isolation (when DATABASE_URL provided)
         if: ${{ secrets.DATABASE_URL != '' }}
         env:
