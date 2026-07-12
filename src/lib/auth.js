@@ -4,7 +4,10 @@ import { etatCompte } from "@/lib/db";
 import { loadJwtKeyConfig } from "@/lib/jwt-keys";
 
 const COOKIE = "notaria_session";
-const DUREE_SESSION = 60 * 30; // 30 min — postes partagés à l'accueil
+const DUREE_SESSION = 60 * 30; // 30 min glissantes — postes partagés à l'accueil
+// Plafond ABSOLU depuis la connexion initiale, même en cas d'activité continue :
+// une session ne peut jamais dépasser cette durée, glissement inclus.
+const DUREE_MAX_ABSOLUE = 60 * 60 * 4; // 4h
 const DEFAULT_STEPUP_WINDOW_MINUTES = 15;
 
 function signWithActiveKey(payload, expiresIn) {
@@ -21,6 +24,11 @@ function verifyWithAnyKey(token) {
   throw new Error("invalid token");
 }
 
+function poserCookie(token) {
+  const secure = process.env.NODE_ENV === "production";
+  cookies().set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION, secure });
+}
+
 export function creerSession(user, opts = {}) {
   const now = Math.floor(Date.now() / 1000);
   const mfaEnabled = !!user.mfa_active;
@@ -32,11 +40,29 @@ export function creerSession(user, opts = {}) {
         doitChangerMdp: !!user.doit_changer_mdp,
         mfaEnabled,
         mfaLevel,
-        mfaVerifiedAt: opts.mfaVerifiedAt || now },
+        mfaVerifiedAt: opts.mfaVerifiedAt || now,
+        sessionDebut: now },
     DUREE_SESSION
   );
-  const secure = process.env.NODE_ENV === "production";
-  cookies().set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: DUREE_SESSION, secure });
+  poserCookie(token);
+}
+
+/**
+ * Fenêtre glissante : si plus de la moitié de DUREE_SESSION s'est écoulée
+ * depuis la dernière émission, re-signe un cookie frais (même contenu, exp
+ * repoussée) pour éviter une déconnexion en pleine saisie — SAUF au-delà de
+ * DUREE_MAX_ABSOLUE depuis la connexion initiale (sessionDebut), qui reste
+ * une limite dure même en cas d'activité continue.
+ */
+function rafraichirSiNecessaire(s) {
+  const now = Math.floor(Date.now() / 1000);
+  const debut = Number(s.sessionDebut || s.iat || now);
+  if (now - debut >= DUREE_MAX_ABSOLUE) return;
+  const restant = Number(s.exp || now) - now;
+  if (restant > DUREE_SESSION / 2) return;
+  const { iat, exp, ...payload } = s;
+  const token = signWithActiveKey(payload, DUREE_SESSION);
+  poserCookie(token);
 }
 
 export function fermerSession() {
@@ -77,6 +103,7 @@ export async function exigerSession(permettreMdpProvisoire = false) {
     const e = new Error("Vous devez d'abord changer votre mot de passe (première connexion).");
     e.status = 403; throw e;
   }
+  try { rafraichirSiNecessaire(s); } catch { /* le rafraîchissement est un confort, pas une condition d'accès */ }
   return s;
 }
 
