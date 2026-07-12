@@ -166,8 +166,18 @@ jamais recevoir ces comptes de démo à mot de passe connu) :
   et `ADMIN_DATABASE_URL` (compte administrateur, uniquement pour créer les deux
   études fictives du test — jamais utilisé par l'application).
 - L'application doit se connecter avec le rôle `notaria_app` (jamais superuser,
-  sinon la RLS ne s'applique pas).
-- HTTPS obligatoire ; `JWT_SECRET` long et secret ; sauvegardes quotidiennes chiffrées.
+  sinon la RLS ne s'applique pas). **La RLS est effectivement posée dans
+  `db/schema.pg.sql`** (policies `isolation_*`, `FORCE ROW LEVEL SECURITY`) — le rôle
+  `notaria_app` n'est PAS créé automatiquement par la migration (ça nécessiterait un
+  privilège CREATEROLE plus large que ce dont elle a besoin) : bootstrap manuel une
+  fois par base, procédure en commentaire juste avant le bloc RLS dans ce fichier.
+  Le propriétaire du schéma (celui qui joue les migrations, `ADMIN_DATABASE_URL`) a
+  besoin de `BYPASSRLS` pour que les fonctions SECURITY DEFINER (auth_lookup...)
+  fonctionnent — sans quoi la connexion elle-même est cassée. Un self-check au
+  démarrage (`instrumentation.js`) vérifie ces deux points et logue un avertissement
+  clair si l'un manque.
+- HTTPS obligatoire ; `JWT_SECRET` long et secret ; sauvegardes quotidiennes chiffrées
+  (pas encore automatisées sur le déploiement de test actuel — cf. TODO-DEV.md).
 - Faire réaliser un test d'intrusion avant l'ouverture au-delà de l'étude pilote.
 
 ## Ce que ce socle N'EST PAS
