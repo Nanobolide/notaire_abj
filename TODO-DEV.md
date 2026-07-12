@@ -7,10 +7,13 @@
 > aucune policy RLS, contrairement à `db/schema.sql` qui les définit mais n'était jamais
 > exécuté. Chaque section ci-dessous a un critère d'acceptation vérifiable.
 >
-> **Mise à jour 2026-07-12 (branche `brindou`)** : tout le P0 et la quasi-totalité du P1
-> sont traités et vérifiés en conditions réelles sur le serveur de test (login, isolation
+> **Mise à jour 2026-07-12 (branche `brindou`)** : P0, P1, P3 complets et le P2 quasi
+> complet — tout vérifié en conditions réelles sur le serveur de test (login, isolation
 > croisée, console Super Admin, récupération de mot de passe, cookie forgé, session
-> glissante). Voir l'historique de la branche pour le détail commit par commit.
+> glissante, migrations rejouées, sauvegarde restaurable). Seul point restant : le
+> découpage des pages monolithiques (#13), volontairement laissé pour une repasse avec
+> vérification visuelle dans le navigateur plutôt qu'en aveugle. Voir l'historique de
+> la branche pour le détail commit par commit.
 
 ---
 
@@ -108,36 +111,62 @@
 
 ## P2 — Qualité de code / maintenabilité
 
-### 13. Découper les pages monolithiques — ⏳ NON FAIT
+### 13. Découper les pages monolithiques — ⏳ NON FAIT (seul point restant)
 - `src/app/actes/page.js` (461 lignes), `comptes` (280), `appels` (254) : tout est
   inline (état, fetch, tableau, modales). Extraire au minimum : un composant
   Registre/Tableau paginé réutilisable, les modales, un hook de fetch avec gestion
-  d'erreur commune.
+  d'erreur commune. Volontairement laissé de côté : gros refactor UI à haut risque
+  de régression visuelle, à faire avec repasse manuelle dans le navigateur (pas
+  seulement build+curl comme le reste de cette liste).
 
-### 14. Trancher le sort du squelette DDD `src/modules/` — ⏳ NON FAIT
-- Dossiers `domain/application/infrastructure/interfaces` vides (README seulement).
-  Recommandation : supprimer tant que la V3 n'est pas lancée.
+### 14. Trancher le sort du squelette DDD `src/modules/` — ✅ FAIT
+- Supprimé (5 fichiers README/contexts.md, zéro code, rien ne les référençait).
 
-### 15. Tests unitaires métier — ⏳ NON FAIT
-- Aucun test sur les règles de gestion : `plafondReglement`, calcul d'échéance
-  (Succession 180 j / Simple 20 j / défaut 30 j), détection de doublon 5 min,
-  `filtrerActe`/`voitMontants` (matrice de visibilité par niveau d'accès).
+### 15. Tests unitaires métier — ✅ FAIT
+- `tests/regles-metier.js` (17 cas, `node --test`, zéro dépendance) :
+  `plafondReglement`, `estVentile`, `filtrerActe` (Accueil/Notaire/Formaliste),
+  `echeanceParDefaut` (nouvellement extrait de la route vers `src/lib/regles.js`),
+  `joursEcoules`, `seuilsActe`, `respectEcheance`, `totalFacture`, `resteAPayer`.
+  Ajouté au job CI. Vérifié en conditions réelles (création d'un acte sans
+  échéance → bonne date en base).
+- Non fait : détection de doublon 5 min (dépend du temps SQL en conditions
+  réelles, pas extrait en fonction pure — nécessiterait un vrai test
+  d'intégration avec base, hors périmètre "unitaire").
 
-### 16. Nettoyages divers — ⏳ NON FAIT
-- `src/lib/db.js` : vérifier si `TenantResolver` / `ConnectionManager` / `pool = db`
-  sont réellement utilisés ailleurs, purger sinon.
-- `render.yaml` : décider si le déploiement Render est encore d'actualité (sinon
-  supprimer — commentaire RLS/BYPASSRLS déjà ajouté en attendant).
-- README : sections mises à jour au fil de l'eau (RLS, SEED_DEMO) — relecture
-  complète à faire une fois le reste du P2/P3 traité.
+### 16. Nettoyages divers — ✅ FAIT
+- `src/lib/db.js` : `TenantResolver`/`ConnectionManager` supprimés (exports morts,
+  rien ne les important) ; les fonctions internes (`poolForTenant` etc.) restent,
+  toujours utilisées par `withTenant`.
+- `render.yaml` : gardé (décision de le supprimer pas de mon ressort), mais
+  corrigé et documenté (`SEED_DEMO=1`, note BYPASSRLS pour son rôle unique).
+- README : sections sécurité/RLS/SEED_DEMO mises à jour pour refléter l'état réel.
 
 ---
 
 ## P3 — Infra / exploitation (serveur de prod cible)
 
-### 17. Sauvegardes quotidiennes de la base — ⏳ NON FAIT
-### 18. Monitoring (sonde `/api/health`) — ⏳ NON FAIT
-### 19. Logrotate PM2 — ⏳ NON FAIT
+### 17. Sauvegardes quotidiennes de la base — ✅ FAIT
+- `notaria` ajoutée à `/var/www/backup/scripts/backup_hostdbs.sh` (mécanisme
+  existant, déjà utilisé pour 3 autres bases sans script dédié : dump atomique,
+  rotation 7 jours, sync Google Drive via l'orchestrateur déjà en cron à 2h30).
+  Testé manuellement : dump valide (22 tables, `gunzip -t` OK). Hors dépôt git
+  (scripts serveur partagés, pas versionnés).
+
+### 18. Monitoring (sonde `/api/health`) — ✅ FAIT
+- `scripts/healthcheck.sh` (dans le dépôt) : vérifie réellement l'app + la base
+  (pas juste le statut PM2 "online"), silencieux si OK, logue sinon. Câblé en
+  cron toutes les 5 min sur le serveur (`/var/log/noraci-healthcheck.log`).
+  Uptime Kuma tourne déjà sur ce serveur pour d'autres apps — ajouter
+  `https://notaci.brindoujunior.com/api/health` comme moniteur via son interface
+  web reste une option pour un tableau de bord plus visuel (non fait : modifier
+  sa base SQLite pendant qu'il tourne aurait été risqué, à faire via l'UI).
+
+### 19. Logrotate PM2 — ✅ FAIT
+- `/etc/logrotate.d/noraci` (hors dépôt) : `logs/*.log` de l'app (14 jours) +
+  `/var/log/noraci-healthcheck.log` (8 semaines), `copytruncate` (PM2 garde le
+  fichier ouvert, pas de signal de rechargement nécessaire). Validé par
+  `logrotate -d`.
+
 ### 20. `.env.example` — ✅ FAIT (ADMIN_DATABASE_URL, SEED_DEMO, JWT_SECRETS_JSON, PORT documentés)
 
 ---
