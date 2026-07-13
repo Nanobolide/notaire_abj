@@ -11,9 +11,8 @@ export async function POST() {
     const s = await exigerAdmin();
     const resultat = await withTenant(s.etudeId, async (c) => {
       const { rows } = await c.query(
-        `SELECT (SELECT count(*) FROM actes WHERE etude_id = $1 AND supprime_le IS NULL)
-              + (SELECT count(*) FROM appels_courriers WHERE etude_id = $1 AND supprime_le IS NULL) AS total`,
-        [s.etudeId]);
+        `SELECT (SELECT count(*) FROM actes WHERE supprime_le IS NULL)
+              + (SELECT count(*) FROM appels_courriers WHERE supprime_le IS NULL) AS total`);
       if (Number(rows[0].total) > 0) {
         const e = new Error("Les registres ne sont pas vides : chargement refusé pour ne rien écraser.");
         e.status = 409; throw e;
@@ -21,20 +20,25 @@ export async function POST() {
       const uid = async (nom) => {
         const m = { "Secrétariat": "secretariat", "Accueil": "accueil", "Clerc 1": "clerc1", "Le Notaire": "notaire" };
         if (!m[nom]) return null;
-        const r = await c.query(`SELECT id FROM utilisateurs WHERE identifiant = $1 AND etude_id = $2`, [m[nom], s.etudeId]);
+        const r = await c.query(`SELECT id FROM utilisateurs WHERE identifiant = $1`, [m[nom]]);
         return r.rows[0]?.id || null;
       };
       for (const a of DEMO_ACTES) {
         const { rows: ins } = await c.query(
           `INSERT INTO actes (etude_id, numero_minute, numero_dossier, date_ouverture, date_echeance,
              nature_acte, complexite, responsable, conservation_fonciere, progression, termine_le,
-             valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par)
+             valeur_acte, honoraires_totaux, montant_regle, statut_paiement, difficultes, observations, saisi_par,
+             emoluments, exonere_tva, droits_etat, debours, depenses_formalites,
+             autres_depenses, statut_formalites)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $11 THEN now() ELSE NULL END,
-                   $12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+                   $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING id`,
           [s.etudeId, a.numero_minute, a.numero_dossier, a.date_ouverture, a.date_echeance,
            a.nature_acte, a.complexite, a.responsable, a.conservation_fonciere, a.progression, a.fini,
            a.valeur_acte, a.honoraires_totaux, a.montant_regle, a.statut_paiement,
-           a.difficultes, a.observations, await uid(a.saisi)]);
+           a.difficultes, a.observations, await uid(a.saisi),
+           a.emoluments ?? 0, false, a.droits_etat ?? 0, a.debours ?? 0,
+           a.depenses_formalites ?? 0,
+           a.autres_depenses ?? 0, a.statut_formalites ?? "Pas encore débuté"]);
         for (let i = 0; i < a.parties.length; i++)
           await c.query(`INSERT INTO acte_parties (etude_id, acte_id, ordre, nom_partie) VALUES ($1,$2,$3,$4)`,
             [s.etudeId, ins[0].id, i + 1, a.parties[i]]);

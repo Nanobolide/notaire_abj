@@ -82,15 +82,8 @@ export function respectEcheance(acte) {
   return new Date() > new Date(acte.date_echeance) ? "⚠ Dépassée" : "OK";
 }
 
-export function totalFacture(acte) {
-  const n = (v) => Number(v || 0);
-  const totalFrais = n(acte.honoraires_totaux);
-  const ventile = n(acte.emoluments) + n(acte.droits_etat) + n(acte.debours) + n(acte.autres_depenses);
-  return totalFrais > 0 ? totalFrais : ventile;
-}
-
 export function resteAPayer(acte) {
-  return Math.max(0, totalFacture(acte) - Number(acte.montant_regle || 0));
+  return Math.max(0, Number(acte.honoraires_totaux || 0) - Number(acte.montant_regle || 0));
 }
 
 export function formatFcfa(n) {

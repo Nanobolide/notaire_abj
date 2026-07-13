@@ -18,7 +18,56 @@ CREATE TABLE IF NOT EXISTS etudes (
   email_gmail_notaire VARCHAR(255) UNIQUE,
   email_gmail_partage VARCHAR(255),
   statut VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (statut IN ('active','desactivee')),
+  forfait VARCHAR(20) NOT NULL DEFAULT 'essentiel'
+    CHECK (forfait IN ('ami','essentiel','pro','pro_max')),   -- P9 — classement des études
   cree_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Réglages globaux de la plateforme, pilotés par le Super Administrateur.
+-- Table à clé/valeur : simple, extensible, sans impact sur l'existant.
+CREATE TABLE IF NOT EXISTS reglages_plateforme (
+  cle VARCHAR(60) PRIMARY KEY,
+  valeur TEXT NOT NULL,
+  maj_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Valeurs de départ : le service d'offres est ÉTEINT ; les distinctions de forfait NON appliquées.
+INSERT INTO reglages_plateforme (cle, valeur) VALUES
+  ('offres_actives', 'false'),
+  ('forfaits_restrictions_actives', 'false'),
+  ('annonces_visibles_par', 'tous')          -- 'tous' = notaire + collaborateurs ; 'notaire' = notaire seul
+ ON CONFLICT (cle) DO NOTHING;
+
+-- P10 — Annonces diffusées par le Super Administrateur vers les études.
+CREATE TABLE IF NOT EXISTS annonces (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  titre VARCHAR(160) NOT NULL,
+  message TEXT NOT NULL,
+  type VARCHAR(24) NOT NULL DEFAULT 'information'
+    CHECK (type IN ('information','mise_a_jour','maintenance','proposition_vente','proposition_achat')),
+  -- Champs propres aux offres immobilières (jamais de donnée nominative du client) :
+  bien_ville VARCHAR(120),
+  bien_prix BIGINT,
+  contact_etude VARCHAR(160),
+  cible VARCHAR(20) NOT NULL DEFAULT 'toutes'
+    CHECK (cible IN ('toutes','selection','forfait')),
+  forfait_cible VARCHAR(20),                    -- si cible = 'forfait'
+  cree_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cree_par UUID
+);
+
+-- Destinataires explicites quand cible = 'selection'.
+CREATE TABLE IF NOT EXISTS annonce_etudes (
+  annonce_id UUID NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+  etude_id UUID NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+  PRIMARY KEY (annonce_id, etude_id)
+);
+
+-- Suivi de lecture par étude (cloche : lu / non lu).
+CREATE TABLE IF NOT EXISTS annonce_lectures (
+  annonce_id UUID NOT NULL REFERENCES annonces(id) ON DELETE CASCADE,
+  etude_id UUID NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
+  lu_le TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (annonce_id, etude_id)
 );
 
 CREATE TABLE IF NOT EXISTS utilisateurs (
@@ -38,7 +87,7 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   derniere_activite TIMESTAMPTZ,
   nom_complet VARCHAR,
   niveau_acces VARCHAR NOT NULL DEFAULT 'standard'
-    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard')),
+    CHECK (niveau_acces IN ('administrateur','notaire_salarie','comptable','standard','renseignement')),
   -- C6 : la connexion cherche l'identifiant dans TOUTES les études,
   -- l'unicité doit donc être GLOBALE (et non par étude) pour éviter toute collision.
   UNIQUE (identifiant)
@@ -49,7 +98,7 @@ CREATE TABLE IF NOT EXISTS appels_courriers (
   etude_id UUID NOT NULL REFERENCES etudes(id) ON DELETE CASCADE,
   numero INT NOT NULL,                          -- incrément par étude+année (calculé à l'insertion)
   annee INT NOT NULL DEFAULT EXTRACT(YEAR FROM now()),
-  type_flux VARCHAR(30) NOT NULL,               -- Appel Téléphonique / Courrier Physique / Courrier Électronique
+  type_flux VARCHAR(30) NOT NULL,               -- Appel Téléphonique / Courrier Physique / Courrier Électronique / Visite Client
   date_entree DATE NOT NULL DEFAULT CURRENT_DATE,
   heure TIME NOT NULL DEFAULT LOCALTIME,        -- capturée auto, modifiable (régularisation tracée en audit)
   reference_dossier VARCHAR(50),
@@ -93,8 +142,10 @@ CREATE TABLE IF NOT EXISTS actes (
   exonere_tva BOOLEAN NOT NULL DEFAULT false,
   droits_etat BIGINT NOT NULL DEFAULT 0,
   debours BIGINT NOT NULL DEFAULT 0,
-  debours_rembourses BOOLEAN NOT NULL DEFAULT false,
   prestations_annexes BIGINT NOT NULL DEFAULT 0,
+  -- Autres dépenses : redressement, imprévu… Facultatif, 0 si rien.
+  autres_depenses BIGINT NOT NULL DEFAULT 0,
+  autres_depenses_motif VARCHAR,
   depenses_formalites BIGINT NOT NULL DEFAULT 0,
   statut_formalites VARCHAR NOT NULL DEFAULT 'Pas encore débuté'
     CHECK (statut_formalites IN ('Pas encore débuté','Débuté','En cours','Terminé')),
@@ -213,6 +264,13 @@ BEGIN
   END LOOP;
 END $$;
 GRANT SELECT ON etudes TO notaria_app;
+-- P9 — le super_admin (via l'app) peut lire et changer le forfait d'une étude.
+GRANT UPDATE (forfait, statut) ON etudes TO notaria_app;
+-- P10 — annonces : pas de RLS par étude (portée globale, contrôlée côté application).
+GRANT SELECT, INSERT, UPDATE, DELETE ON annonces TO notaria_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON annonce_etudes TO notaria_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON annonce_lectures TO notaria_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON reglages_plateforme TO notaria_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO notaria_app;
 
 -- Numérotation automatique par étude et par année
@@ -346,3 +404,37 @@ RETURNS VOID LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
 $$;
 REVOKE ALL ON FUNCTION deconnecter_presence(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION deconnecter_presence(UUID) TO notaria_app;
+
+
+-- C14 — Révocation IMMÉDIATE des privilèges : le niveau d'accès et la fonction sont lus
+-- en base à chaque requête. Rétrograder un collaborateur prend effet sur-le-champ.
+CREATE OR REPLACE FUNCTION compte_etat(p_uid UUID)
+RETURNS TABLE (ok BOOLEAN, niveau_acces VARCHAR, fonction VARCHAR)
+LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT (u.actif AND e.statut = 'active'
+          AND (u.verrouille_jusqua IS NULL OR u.verrouille_jusqua <= now())) AS ok,
+         u.niveau_acces, u.fonction
+  FROM utilisateurs u JOIN etudes e ON e.id = u.etude_id
+  WHERE u.id = p_uid;
+$$;
+REVOKE ALL ON FUNCTION compte_etat(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION compte_etat(UUID) TO notaria_app;
+
+
+-- N°28 — Avis des collaborateurs. ANONYME PAR CONSTRUCTION : aucune colonne ne relie
+-- l'avis à un utilisateur ni à une étude. Seule la fonction (Clerc, Comptable…) est
+-- enregistrée, pour situer la remarque. Il n'existe aucun moyen, même en base, de
+-- retrouver l'auteur d'un avis.
+CREATE TABLE IF NOT EXISTS avis (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  fonction VARCHAR,
+  categorie VARCHAR NOT NULL DEFAULT 'Amélioration'
+    CHECK (categorie IN ('Amélioration','Difficulté rencontrée','Erreur / bug','Autre')),
+  message TEXT NOT NULL,
+  recu_le TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Pas de RLS par étude : l'avis ne porte aucune référence d'étude (anonymat).
+-- Le rôle applicatif peut écrire, mais jamais relire ni modifier (l'auteur ne peut pas
+-- se dénoncer par recoupement, et personne dans l'étude ne peut lire les avis).
+REVOKE ALL ON TABLE avis FROM notaria_app;
+GRANT INSERT ON TABLE avis TO notaria_app;

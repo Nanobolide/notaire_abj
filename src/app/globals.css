@@ -163,38 +163,16 @@ tr.zoom td { color: #808080; font-style: italic; font-size: 12px; }
 .pers .p-etat { margin-left: auto; font-size: 11px; }
 .pers .p-etat.vert { color: #2E7D32; font-weight: 600; } .pers .p-etat.gris { color: #8A94A8; }
 
+
+/* Boutons-icônes des tableaux (modifier, réinitialiser, supprimer) */
 .icone {
-  background: none; border: 0.5px solid transparent; border-radius: 6px; cursor: pointer;
-  font-size: 15px; padding: 4px 7px; line-height: 1;
+  background: none; border: 0.5px solid transparent; border-radius: 6px;
+  font-size: 15px; line-height: 1; padding: 5px 7px; cursor: pointer;
+  margin-left: 2px; transition: background .12s, border-color .12s;
 }
 .icone:hover { background: #EEF1F6; border-color: #D5DBE5; }
 .icone.danger:hover { background: #FDF3F3; border-color: #E8C4C4; }
 
-/* --- V3 : console Super-Admin alignée sur la charte main --- */
-.admin-entete {
-  background: var(--bleu);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.admin-entete .admin-nav {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.admin-entete .admin-nav a {
-  color: #D7E0F0;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 12.5px;
-}
-.admin-entete .admin-nav a:hover,
-.admin-entete .admin-nav a.actif {
-  background: var(--bleu-clair);
-  color: #fff;
-}
-.admin-page h1 {
-  color: var(--bleu);
-}
 
 /* Tableaux financiers : montants alignés à droite, lignes zébrées, largeurs stables */
 table.financier { table-layout: fixed; width: 100%; }
@@ -204,3 +182,26 @@ table.financier tbody tr:nth-child(even) { background: #FAFBFD; }
 table.financier tbody tr:hover { background: #F2F5FA; }
 .badge-ventiler { font-size: 10.5px; font-weight: 500; padding: 2px 8px; border-radius: 10px;
   background: #F1F3F7; color: #6B7383; white-space: nowrap; }
+
+
+/* Affichage mobile des tableaux financiers : défilement horizontal plutôt que chevauchement.
+   Les autres tableaux de bord ne sont pas concernés (ils n'ont pas cette classe). */
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table.financier { min-width: 640px; }
+@media (max-width: 720px) {
+  .table-scroll table.financier th, .table-scroll table.financier td { font-size: 11px; padding: 5px 7px; }
+}
+
+
+/* Écran Comptes : contours de lignes nets pour voir clairement la ligne modifiée. */
+table.table-comptes { border-collapse: collapse; width: 100%; }
+table.table-comptes th, table.table-comptes td {
+  border-bottom: 1px solid #E3E7EF; padding: 8px 10px; vertical-align: middle;
+}
+table.table-comptes tbody tr:hover { background: #F5F8FC; }
+table.table-comptes tbody tr.ligne-edition {
+  background: #FBF6E9; outline: 2px solid #B8912F; outline-offset: -2px;
+}
+.icone { background: none; border: none; cursor: pointer; font-size: 15px; padding: 3px 5px; border-radius: 5px; }
+.icone:hover { background: #E8ECF3; }
+.icone.danger:hover { background: #FBE4E4; }

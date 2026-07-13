@@ -8,7 +8,7 @@ import { useBrouillon, effacerBrouillon } from "@/lib/brouillon";
 import { couleurActe, joursEcoules, respectEcheance, resteAPayer, formatFcfa } from "@/lib/regles";
 
 const VIDE = { numero_minute: "", numero_dossier: "", nature_acte: "", complexite: "Simple",
-  responsable: "", conservation_fonciere: "", progression: "Recensement des informations",
+  responsable: "", conservation_fonciere: "", progression: "Rédaction",
   valeur_acte: "", honoraires_totaux: "", montant_regle: "", statut_paiement: "En attente",
   emoluments: "", droits_etat: "", debours: "",
   autres_depenses: "", autres_depenses_motif: "",
@@ -39,14 +39,14 @@ function Actes() {
   const [voitArgent, setVoitArgent] = useState(false);
   const [peutFormalites, setPeutFormalites] = useState(false);
   const [peutPrevision, setPeutPrevision] = useState(false);
-  const [tri, setTri] = useState({ champ: null, sens: "asc" });
+  const [tri, setTri] = useState({ champ: null, sens: "asc" });   // P5.1
   const clicTri = (champ) => setTri((t) =>
     t.champ === champ ? { champ, sens: t.sens === "asc" ? "desc" : "asc" } : { champ, sens: "asc" });
   const [param, setParam] = useState(null);
   const [voletDelais, setVoletDelais] = useState(false);
   const [typeDelai, setTypeDelai] = useState("acte_simple");
   const [journal, setJournal] = useState(null);
-  const [autorise, setAutorise] = useState(null);
+  const [autorise, setAutorise] = useState(null);   // C4 — null tant que le droit n'est pas connu
 
   const charger = useCallback(async () => {
     const q = new URLSearchParams(Object.entries(filtres).filter(([, v]) => v));
@@ -67,8 +67,9 @@ function Actes() {
       setPeutFormalites(["administrateur", "notaire_salarie", "comptable"].includes(n) || d.fonction === "Formaliste");
       const REDACTEURS = ["Notaire principal","Notaire salarié","Clerc de 1ère catégorie","Clerc 2","Clerc 3","Clerc 4","Clerc 5"];
       setPeutPrevision(["administrateur","notaire_salarie","comptable"].includes(n) || REDACTEURS.includes(d.fonction));
+      // C4 — Accueil (et Archiviste) n'ont pas accès au registre des actes.
       const SANS_ACTES = ["Accueil", "Archiviste"];
-      setAutorise(!SANS_ACTES.includes(d.fonction) && n !== "renseignement");
+      setAutorise(!SANS_ACTES.includes(d.fonction));
     }); }, []);
   useEffect(() => { if (autorise) charger(); }, [charger, autorise]);
 
@@ -91,7 +92,7 @@ function Actes() {
       numero_minute: a.numero_minute || "", numero_dossier: a.numero_dossier || "",
       nature_acte: a.nature_acte || "", complexite: a.complexite || "Simple",
       responsable: a.responsable || "", conservation_fonciere: a.conservation_fonciere || "",
-      progression: a.progression || "Recensement des informations",
+      progression: a.progression || "Rédaction",
       valeur_acte: a.valeur_acte ?? "", honoraires_totaux: a.honoraires_totaux ?? "",
       montant_regle: a.montant_regle ?? "", statut_paiement: a.statut_paiement || "En attente",
       parties: a.parties ? a.parties.split(" / ") : ["", ""],
@@ -199,7 +200,6 @@ function Actes() {
       </div>
     </main></>);
   }
-
   return (
     <>
       <Entete />

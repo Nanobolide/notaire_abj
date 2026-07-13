@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { exigerSuperAdmin } from "@/lib/auth";
-import { query } from "@/lib/db";
+import pool from "@/lib/db";
 
 const CLES = {
   offres_actives: ["true", "false"],
@@ -11,7 +11,7 @@ const CLES = {
 export async function GET() {
   try {
     await exigerSuperAdmin();
-    const { rows } = await query(`SELECT cle, valeur FROM reglages_plateforme`);
+    const { rows } = await pool.query(`SELECT cle, valeur FROM reglages_plateforme`);
     const out = {};
     for (const r of rows) out[r.cle] = r.valeur;
     return NextResponse.json(out);
@@ -24,16 +24,9 @@ export async function PATCH(req) {
     const { cle, valeur } = await req.json();
     if (!CLES[cle]) { const e = new Error("Réglage inconnu."); e.status = 400; throw e; }
     if (!CLES[cle].includes(String(valeur))) { const e = new Error("Valeur non autorisée."); e.status = 400; throw e; }
-    const isPg = !!process.env.DATABASE_URL;
-    if (isPg) {
-      await query(
-        `INSERT INTO reglages_plateforme (cle, valeur, maj_le) VALUES ($1,$2,now())
-         ON CONFLICT (cle) DO UPDATE SET valeur = $2, maj_le = now()`, [cle, String(valeur)]);
-    } else {
-      await query(
-        `INSERT INTO reglages_plateforme (cle, valeur, maj_le) VALUES ($1,$2,datetime('now'))
-         ON CONFLICT (cle) DO UPDATE SET valeur = $2, maj_le = datetime('now')`, [cle, String(valeur)]);
-    }
+    await pool.query(
+      `INSERT INTO reglages_plateforme (cle, valeur, maj_le) VALUES ($1,$2,now())
+       ON CONFLICT (cle) DO UPDATE SET valeur = $2, maj_le = now()`, [cle, String(valeur)]);
     return NextResponse.json({ ok: true });
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }

@@ -1,7 +1,7 @@
 import { exigerAdmin } from "@/lib/auth";
 import ExcelJS from "exceljs";
 
-/** P7 — Modèle Excel vierge pour importer les anciens dossiers d'une étude. */
+/** P7 — Modèle Excel vierge à remplir pour importer les anciens dossiers d'une étude. */
 export async function GET() {
   try {
     await exigerAdmin();
@@ -21,6 +21,7 @@ export async function GET() {
       ["Date d'ouverture", "date_ouverture", 15, "JJ/MM/AAAA"],
     ];
 
+    // Ligne de notice
     ws.mergeCells(1, 1, 1, colonnes.length);
     const notice = ws.getCell(1, 1);
     notice.value = "NOTARIA — Modèle d'import. Remplissez une ligne par dossier à partir de la ligne 3. Les colonnes marquées * sont obligatoires. Ne modifiez pas la ligne d'en-tête (ligne 2).";
@@ -28,6 +29,7 @@ export async function GET() {
     notice.alignment = { wrapText: true, vertical: "middle" };
     ws.getRow(1).height = 34;
 
+    // En-têtes
     const enTete = ws.getRow(2);
     colonnes.forEach((c, i) => {
       const cell = enTete.getCell(i + 1);
@@ -40,6 +42,7 @@ export async function GET() {
     });
     enTete.height = 28;
 
+    // Deux lignes d'exemple grisées
     const exemples = [
       ["2026/0125", "D-0125", "Vente", "M. KOUADIO Jean", "Cocody", "Rédaction", "", 1750000, 500000, "15/01/2026"],
       ["2026/0126", "", "Succession", "Hoirie YAO", "Bingerville", "Terminé", "", 4410000, 4410000, "20/01/2026"],

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { exigerAdmin } from "@/lib/auth";
-import { withTenant, audit, newId } from "@/lib/db";
+import { withTenant, audit } from "@/lib/db";
 
 const nombre = (v) => {
   if (v == null || v === "") return 0;
@@ -17,6 +17,7 @@ const dateFr = (v) => {
   return null;
 };
 
+/** Lire le classeur et produire des lignes structurées + les anomalies. */
 async function analyser(fichier) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await fichier.arrayBuffer());
@@ -25,11 +26,11 @@ async function analyser(fichier) {
 
   const lignes = [], anomalies = [];
   ws.eachRow((row, num) => {
-    if (num <= 2) return;
+    if (num <= 2) return;                          // notice + en-tête
     const c = (i) => row.getCell(i).value;
     const minute = texte(c(1));
     const client = texte(c(4));
-    if (!minute && !client) return;
+    if (!minute && !client) return;                // ligne vide, ignorée
     const ligne = {
       numero_minute: minute,
       numero_dossier: texte(c(2)),
@@ -70,27 +71,25 @@ export async function POST(req) {
       });
     }
 
+    // etape === "confirmer" : insertion réelle, transaction, sans toucher aux dossiers existants
     if (valides.length === 0) { const e = new Error("Aucune ligne valide à importer."); e.status = 400; throw e; }
     const inserees = await withTenant(s.etudeId, async (c) => {
       let n = 0;
       for (const l of valides) {
+        // on n'écrase jamais un dossier existant : on saute les doublons de n° minute
         const { rows: [exist] } = await c.query(
-          `SELECT 1 FROM actes WHERE etude_id = $1 AND numero_minute = $2 AND supprime_le IS NULL`,
-          [s.etudeId, l.numero_minute]);
+          `SELECT 1 FROM actes WHERE numero_minute = $1 AND supprime_le IS NULL`, [l.numero_minute]);
         if (exist) continue;
-        const isPg = !!process.env.DATABASE_URL;
-        const dateOuverture = isPg ? "COALESCE($10::date, CURRENT_DATE)" : "COALESCE($10, date('now'))";
         const { rows: [acte] } = await c.query(
           `INSERT INTO actes (etude_id, numero_minute, numero_dossier, nature_acte, conservation_fonciere,
                               progression, responsable, honoraires_totaux, montant_regle, date_ouverture)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,${dateOuverture})
+           VALUES (current_setting('app.current_etude_id')::uuid,$1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9::date, now()::date))
            RETURNING id`,
-          [s.etudeId, l.numero_minute, l.numero_dossier || null, l.nature_acte || null, l.conservation_fonciere || null,
+          [l.numero_minute, l.numero_dossier || null, l.nature_acte || null, l.conservation_fonciere || null,
            l.progression, l.responsable || null, l.honoraires_totaux, l.montant_regle, l.date_ouverture]);
         await c.query(
-          `INSERT INTO acte_parties (id, etude_id, acte_id, ordre, nom_partie)
-           VALUES ($1,$2,$3,1,$4)`,
-          [newId(), s.etudeId, acte.id, l.client]);
+          `INSERT INTO acte_parties (etude_id, acte_id, ordre, nom_partie)
+           VALUES (current_setting('app.current_etude_id')::uuid, $1, 1, $2)`, [acte.id, l.client]);
         n++;
       }
       await audit(c, { etudeId: s.etudeId, table: "actes", ligneId: null,

@@ -32,18 +32,8 @@ export default function Parametres() {
     setImportInfo(`${d.importees} dossier(s) importé(s).` + (d.ignorees ? ` ${d.ignorees} déjà présent(s), ignoré(s).` : ""));
   };
   const [tva, setTva] = useState("18");
-  const [p, setP] = useState(null);
-  const [erreur, setErreur] = useState("");
-  const [info, setInfo] = useState("");
 
-  const charger = () => fetch("/api/parametres").then(lireJson)
-    .then((d) => {
-      if (d.erreur) { setErreur(d.erreur); return; }
-      setP(d);
-      if (d.taux_tva != null) setTva(String(Number(d.taux_tva) * 100));
-    });
-  useEffect(() => { charger(); }, []);
-
+  /** Le taux de TVA se règle seul : Notaire, Notaire salarié et Comptable y ont droit. */
   const enregistrerTva = async () => {
     const t = Number(tva) / 100;
     if (!(t >= 0 && t <= 1)) { alert("Le taux doit être compris entre 0 et 100 %."); return; }
@@ -51,8 +41,14 @@ export default function Parametres() {
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taux_tva: t }) });
     const d = await rep.json();
     alert(rep.ok ? "Taux de TVA enregistré." : (d.erreur || "Modification refusée."));
-    if (rep.ok) charger();
   };
+  const [p, setP] = useState(null);
+  const [erreur, setErreur] = useState("");
+  const [info, setInfo] = useState("");
+
+  const charger = () => fetch("/api/parametres").then(lireJson)
+    .then((d) => (d.erreur ? setErreur(d.erreur) : setP(d)));
+  useEffect(() => { charger(); }, []);
 
   const maj = (ch) => (e) => setP({ ...p, [ch]: Number(e.target.value) });
   const maj2 = (ch) => (e) => setP({ ...p, [ch]: e.target.value });
@@ -157,11 +153,11 @@ export default function Parametres() {
           <button className="bouton secondaire" onClick={reinitialiser}>↺ Rétablir les valeurs par défaut</button>
           <a className="bouton secondaire" href="/comptes" style={{ marginLeft: "auto" }}>Gérer les collaborateurs →</a>
         </div>
-
-        <div className="carte" style={{ marginTop: 12 }}>
+        <div className="carte">
           <h1 style={{ fontSize: 15 }}>Taux de TVA sur les émoluments</h1>
-          <p className="sous-titre">Conservé pour usage futur (option A : non inclus dans le total facturé affiché).
-            Modifiable par le Notaire, le Notaire salarié et le Comptable.</p>
+          <p className="sous-titre">Appliqué automatiquement aux émoluments, sauf pour les actes marqués
+            « exonéré ». Modifiable par le Notaire, le Notaire salarié et le Comptable.
+            Faites confirmer le taux et les cas d'exonération par votre comptable.</p>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
             <label style={{ maxWidth: 160 }}>Taux (en %)
               <input type="number" min="0" max="100" step="0.5"
@@ -170,7 +166,6 @@ export default function Parametres() {
             <button className="bouton" onClick={enregistrerTva}>Enregistrer le taux</button>
           </div>
         </div>
-
         <div className="carte">
           <h1 style={{ fontSize: 15 }}>Importer des dossiers depuis Excel</h1>
           <p className="sous-titre">Pour reprendre les anciens dossiers d'une étude sans tout ressaisir.

@@ -65,6 +65,7 @@ const Etat = ({ u }) => {
   return <span style={{ color: "#2E7D32" }}>● Actif</span>;
 };
 
+const BLEU_TXT = "1F3864";
 export default function Comptes() {
   const [lignes, setLignes] = useState([]);
   const [form, setForm] = useState(VIDE);
@@ -74,6 +75,8 @@ export default function Comptes() {
   const [erreur, setErreur] = useState("");
   const [info, setInfo] = useState("");
   const [mdpAffiche, setMdpAffiche] = useState(null);
+  const [mdpCompte, setMdpCompte] = useState(null);   // C3 — compte dont on change le mot de passe
+  const [mdpChoisi, setMdpChoisi] = useState("");
 
   const charger = () => fetch("/api/comptes").then(lireJson)
     .then((d) => (d.erreur ? setErreur(d.erreur) : setLignes(d)));
@@ -142,6 +145,29 @@ export default function Comptes() {
     charger();
   };
 
+  const definirMdp = async () => {
+    setErreur("");
+    if (!mdpChoisi || mdpChoisi.length < 8) { setErreur("Le nouveau mot de passe doit faire au moins 8 caractères."); return; }
+    const rep = await fetch(`/api/comptes/${mdpCompte.id}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "definir_mdp", motDePasseProvisoire: mdpChoisi }) });
+    const d = await lireJson(rep);
+    if (!rep.ok) { setErreur(d.erreur); return; }
+    setMdpCompte(null); setMdpChoisi(""); setInfo(`Mot de passe changé pour « ${mdpCompte.identifiant} ».`); charger();
+  };
+
+  const genererPourCompte = async () => {
+    const nouveau = genererMotDePasse();
+    const rep = await fetch(`/api/comptes/${mdpCompte.id}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reinitialiser", motDePasseProvisoire: nouveau }) });
+    const d = await lireJson(rep);
+    if (!rep.ok) { setErreur(d.erreur); return; }
+    const ident = mdpCompte.identifiant;
+    setMdpCompte(null); setMdpChoisi("");
+    setMdpAffiche({ identifiant: ident, mdp: nouveau }); charger();
+  };
+
   const supprimer = async (u) => {
     if (!confirm(`Supprimer définitivement le compte « ${u.identifiant} » ?\n\nCette action est irréversible.`)) return;
     setErreur(""); setInfo("");
@@ -172,6 +198,20 @@ export default function Comptes() {
                              padding: "10px 16px", fontSize: 17, letterSpacing: 1.5 }}>{mdpAffiche.mdp}</code>
               <button className="bouton secondaire" onClick={() => copier(mdpAffiche.mdp)}>📋 Copier</button>
               <button className="bouton" onClick={() => setMdpAffiche(null)}>J'ai noté, fermer</button>
+            </div>
+          </div>
+        )}
+
+        {mdpCompte && (
+          <div className="carte" style={{ background: "#F7F9FC", borderColor: "#C9D4E5" }}>
+            <h1 style={{ fontSize: 15, color: BLEU_TXT }}>🔑 Mot de passe de « {mdpCompte.identifiant} »</h1>
+            <p className="sous-titre">Choisissez un nouveau mot de passe, ou laissez l'application en générer un.</p>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <label style={{ flex: "1 1 260px" }}>Nouveau mot de passe (8 caractères minimum)
+                <ChampMdp valeur={mdpChoisi} onChange={(e) => setMdpChoisi(e.target.value)} /></label>
+              <button className="bouton" onClick={definirMdp}>Valider ce mot de passe</button>
+              <button className="bouton secondaire" onClick={genererPourCompte}>🎲 Générer à la place</button>
+              <button className="bouton secondaire" onClick={() => { setMdpCompte(null); setMdpChoisi(""); }}>Annuler</button>
             </div>
           </div>
         )}
@@ -215,7 +255,7 @@ export default function Comptes() {
           </div>
         )}
 
-        <table>
+        <table className="table-comptes">
           <thead><tr>
             <th style={{ width: "22%" }}>Identifiant (nom affiché)</th>
             <th style={{ width: "20%" }}>Nom et prénom</th>
@@ -229,7 +269,7 @@ export default function Comptes() {
               const estAdmin = u.niveau_acces === "administrateur";
               const enCours = edition === u.id;
               return (
-                <tr key={u.id} style={{ background: !u.actif ? "#F7F4FB" : enCours ? "#FBF9F2" : undefined }}>
+                <tr key={u.id} className={enCours ? "ligne-edition" : ""} style={{ background: !u.actif ? "#F7F4FB" : undefined }}>
                   {enCours ? (<>
                     <td><input value={brouillon.nom_affiche} onChange={majBrouillon("nom_affiche")} style={{ fontSize: 12 }} /></td>
                     <td><input value={brouillon.nom_complet} onChange={majBrouillon("nom_complet")} style={{ fontSize: 12 }} /></td>
@@ -250,8 +290,8 @@ export default function Comptes() {
                     <td style={{ fontSize: 11.5 }}><Etat u={u} /></td>
                     <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
                       <button className="icone" title="Modifier ce compte" onClick={() => ouvrirEdition(u)}>✏️</button>
-                      <button className="icone" title="Réinitialiser le mot de passe"
-                              onClick={() => action(u.id, "reinitialiser")}>🔑</button>
+                      <button className="icone" title="Changer le mot de passe"
+                              onClick={() => { setMdpCompte(u); setMdpChoisi(""); setErreur(""); setInfo(""); }}>🔑</button>
                       {Boolean(u.verrouille) && (
                         <button className="icone" title="Déverrouiller" onClick={() => action(u.id, "deverrouiller")}>🔓</button>
                       )}

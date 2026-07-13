@@ -87,7 +87,7 @@ export default function Comptabilite() {
         </p>
 
         <Bandeau>B · RENTABILITÉ PAR CATÉGORIE D'ACTE</Bandeau>
-        <table className="financier">
+        <div className="table-scroll"><table className="financier">
           <thead><tr>
             <th style={{ width: "22%" }}>Nature de l'acte</th><th className="num" style={{ width: "8%" }}>Dossiers</th>
             <th className="num">Émoluments</th><th className="num">Droits d'État</th>
@@ -109,10 +109,10 @@ export default function Comptabilite() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
 
         <Bandeau>C · RENTABILITÉ PAR COLLABORATEUR</Bandeau>
-        <table className="financier">
+        <div className="table-scroll"><table className="financier">
           <thead><tr>
             <th style={{ width: "24%" }}>Collaborateur</th><th className="num" style={{ width: "9%" }}>Dossiers</th>
             <th className="num" style={{ width: "9%" }}>En cours</th>
@@ -131,12 +131,12 @@ export default function Comptabilite() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
 
         <Bandeau>D · BALANCE DES TIERS — SOLDE DE CHAQUE CLIENT</Bandeau>
         <p className="sous-titre">Ce que chaque client doit encore, sans ouvrir un seul dossier physique.
           Les 30 soldes les plus importants.</p>
-        <table className="financier">
+        <div className="table-scroll"><table className="financier">
           <thead><tr><th style={{ width: "38%" }}>Client</th><th className="num" style={{ width: "10%" }}>Dossiers</th>
             <th className="num">Total des frais</th><th className="num">Encaissé</th>
             <th className="num" style={{ width: "18%" }}>Solde</th></tr></thead>
@@ -152,7 +152,7 @@ export default function Comptabilite() {
               <tr><td colSpan={5} style={{ color: "#2E7D32" }}>Tous les clients sont à jour de leurs règlements.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
 
         <Bandeau>E · TRÉSORERIE DES FORMALITÉS</Bandeau>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

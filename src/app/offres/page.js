@@ -6,7 +6,7 @@ import { lireJson } from "@/lib/http";
 const fcfa = (n) => (n == null ? "—" : Number(n).toLocaleString("fr-FR") + " F");
 
 export default function Offres() {
-  const [etat, setEtat] = useState(null);
+  const [etat, setEtat] = useState(null);      // null = chargement
   const [session, setSession] = useState(null);
   const [form, setForm] = useState({ sens: "vente", titre: "", description: "", ville: "", prix: "", contact: "" });
   const [ouvert, setOuvert] = useState(false);

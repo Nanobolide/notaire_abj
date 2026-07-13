@@ -24,7 +24,7 @@ function Appels() {
   const [enEdition, setEnEdition] = useState(null);
   const majFiltre = (o) => { setPage(1); setFiltres(o); };
   const [filtres, setFiltres] = useState({ statut: "", motif: "", destinataire: "", du: "", au: "" });
-  const [tri, setTri] = useState({ champ: null, sens: "asc" });
+  const [tri, setTri] = useState({ champ: null, sens: "asc" });   // P5.1
   const clicTri = (champ) => setTri((t) =>
     t.champ === champ ? { champ, sens: t.sens === "asc" ? "desc" : "asc" } : { champ, sens: "asc" });
   const [recherche, setRecherche] = useState("");
@@ -192,7 +192,7 @@ function Appels() {
           <thead>
             <tr>
               <th onClick={() => clicTri("numero")} style={{ cursor: "pointer", userSelect: "none" }}>N°{fleche("numero", tri.champ, tri.sens)}</th><th onClick={() => clicTri("type_flux")} style={{ cursor: "pointer", userSelect: "none" }}>Type{fleche("type_flux", tri.champ, tri.sens)}</th><th onClick={() => clicTri("date_entree")} style={{ cursor: "pointer", userSelect: "none" }}>Date{fleche("date_entree", tri.champ, tri.sens)}</th><th onClick={() => clicTri("heure")} style={{ cursor: "pointer", userSelect: "none" }}>Heure{fleche("heure", tri.champ, tri.sens)}</th><th>Réf. dossier</th><th onClick={() => clicTri("client_nom")} style={{ cursor: "pointer", userSelect: "none" }}>Client{fleche("client_nom", tri.champ, tri.sens)}</th>
-              <th>Contact</th><th onClick={() => clicTri("destinataire")} style={{ cursor: "pointer", userSelect: "none" }}>Destinataire{fleche("destinataire", tri.champ, tri.sens)}</th><th onClick={() => clicTri("motif")} style={{ cursor: "pointer", userSelect: "none" }}>Motif{fleche("motif", tri.champ, tri.sens)}</th><th onClick={() => clicTri("statut_traitement")} style={{ cursor: "pointer", userSelect: "none" }}>Statut{fleche("statut_traitement", tri.champ, tri.sens)}</th>
+              <th>Contact</th><th onClick={() => clicTri("destinataire")} style={{ cursor: "pointer", userSelect: "none" }}>Destinataire{fleche("destinataire", tri.champ, tri.sens)}</th><th onClick={() => clicTri("motif")} style={{ cursor: "pointer", userSelect: "none" }}>Motif{fleche("motif", tri.champ, tri.sens)}</th><th onClick={() => clicTri("statut")} style={{ cursor: "pointer", userSelect: "none" }}>Statut{fleche("statut", tri.champ, tri.sens)}</th>
               <th>Tent.</th><th>Jours</th><th>🚨 Alerte</th><th>Saisi par</th><th>Actions</th>
             </tr>
           </thead>

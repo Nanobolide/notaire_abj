@@ -30,6 +30,7 @@ WITH e AS (SELECT '11111111-1111-1111-1111-111111111111'::uuid AS id)
 INSERT INTO referentiels (etude_id, type_liste, valeur, ordre)
 SELECT e.id, l.type_liste, l.valeur, l.ordre FROM e, (VALUES
   ('type_flux','Appel Téléphonique',1),('type_flux','Courrier Physique',2),('type_flux','Courrier Électronique',3),
+('type_flux','Visite Client',4),
   ('destinataire','Le Notaire',1),('destinataire','Clerc 1',2),('destinataire','Clerc 2',3),('destinataire','Clerc 3',4),
   ('destinataire','Comptabilité',5),('destinataire','Formaliste',6),('destinataire','Accueil',7),
   ('motif','Nouvelle demande',1),('motif','Suivi dossier existant',2),('motif','Réclamation',3),('motif','RDV',4),
@@ -41,10 +42,10 @@ SELECT e.id, l.type_liste, l.valeur, l.ordre FROM e, (VALUES
   ('nature_acte','Légalisation',11),('nature_acte','Adoption',12),('nature_acte','Reconnaissance d''Enfant Naturel',13),
   ('nature_acte','Dation en Paiement',14),('nature_acte','Autres',15),
   ('responsable','Le Notaire',1),('responsable','Clerc 1',2),('responsable','Clerc 2',3),('responsable','Clerc 3',4),
-  ('progression','Réception des actes',1),('progression','Paiement des frais',2),('progression','Rédaction',3),
-  ('progression','Transmission du projet',4),('progression','Signature',5),('progression','Préparation des formalités',6),
-  ('progression','Formalités en cours',7),('progression','État Foncier',8),('progression','Transmission client',9),
-  ('progression','Terminé',10),('progression','Annulé',11),
+  ('progression','Recensement des informations',1),('progression','Paiement',2),('progression','Formalité antérieure',3),
+  ('progression','Rédaction',4),('progression','Signature',5),('progression','Préparation des formalités',6),
+  ('progression','Dépôt des formalités',7),('progression','Retrait de la minute',8),('progression','Réception de l''état foncier',9),
+  ('progression','Réception du CMPF',10),('progression','Transmission client',11),('progression','Terminé',12),('progression','Annulé',13),
   ('statut_paiement','Réglé',1),('statut_paiement','Partiel',2),('statut_paiement','En attente',3),
   ('conservation_fonciere','ABENGOUROU',1),('conservation_fonciere','ABOBO',2),('conservation_fonciere','ADZOPE',3),
   ('conservation_fonciere','AGBOVILLE',4),('conservation_fonciere','BINGERVILLE',5),('conservation_fonciere','BONDOUKOU',6),

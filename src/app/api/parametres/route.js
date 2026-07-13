@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { exigerSession, exigerAdmin } from "@/lib/auth";
 import { modifieTva, gereParametres } from "@/lib/acces";
 import { withTenant, audit } from "@/lib/db";
-import { now } from "@/lib/dialect";
 
 const DEFAUTS = {
   conservation_annees: 10, session_minutes: 30,
@@ -11,7 +10,6 @@ const DEFAUTS = {
   succession_s1: 180, succession_s2: 270, succession_s3: 365,
   appel_s1: 3, appel_s2: 5, appel_s3: 10,
   couleur_n1: "#FFF4C2", couleur_n2: "#FFD9A0", couleur_n3: "#FF9E9E", couleur_ok: "#E9F7EC",
-  taux_tva: 0.18,
 };
 
 async function lire(c, etudeId) {
@@ -72,7 +70,7 @@ export async function PATCH(req) {
       await lire(c, s.etudeId); // garantit l'existence de la ligne
       if (champs.length) {
         const sets = champs.map((k, i) => `${k} = $${i + 2}`).join(", ");
-        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = ${now()} WHERE etude_id = $1`,
+        await c.query(`UPDATE parametres_etude SET ${sets}, maj_le = now() WHERE etude_id = $1`,
           [s.etudeId, ...champs.map((k) => source[k])]);
       }
       await audit(c, { etudeId: s.etudeId, table: "parametres_etude", action: "modification",

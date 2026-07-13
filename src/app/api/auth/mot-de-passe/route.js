@@ -15,7 +15,7 @@ export async function POST(req) {
       return NextResponse.json({ erreur: "Le nouveau mot de passe doit être différent de l'actuel." }, { status: 400 });
 
     const user = await withTenant(s.etudeId, async (c) => {
-      const { rows } = await c.query(`SELECT * FROM utilisateurs WHERE id = $1 AND etude_id = $2`, [s.uid, s.etudeId]);
+      const { rows } = await c.query(`SELECT * FROM utilisateurs WHERE id = $1`, [s.uid]);
       const u = rows[0];
       if (!u) { const e = new Error("Compte introuvable"); e.status = 404; throw e; }
       const ok = await bcrypt.compare(actuel, u.hash_mot_de_passe);
@@ -28,7 +28,7 @@ export async function POST(req) {
         action: "modification", apres: { evenement: "changement_mot_de_passe" }, utilisateur: s.uid });
       return maj[0];
     });
-    creerSession(user, { mfaLevel: user.mfa_active ? "full" : "none" }); // nouvelle session sans l'obligation
+    creerSession(user); // nouvelle session sans l'obligation
     return NextResponse.json({ ok: true });
   } catch (e) { return NextResponse.json({ erreur: e.message }, { status: e.status || 500 }); }
 }
