@@ -1,16 +1,18 @@
 {
   "name": "notaria-saas",
-  "version": "0.1.0",
+  "version": "3.5.0",
   "private": true,
-  "description": "Plateforme SaaS multi-études de gestion notariale — socle V1 (étude pilote Me KOUASSI)",
+  "description": "NOTARIA socle v3.5 — version corrigée (audit sécurité, étude pilote Me KOUASSI)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:init": "psql \"$DATABASE_URL\" -f db/schema.sql && psql \"$DATABASE_URL\" -f db/seed.sql",
+    "db:init": "node scripts/reset-db.mjs",
+    "db:reset": "node scripts/reset-db.mjs",
     "test:isolation": "node tests/isolation.js"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "bcryptjs": "^2.4.3",
     "exceljs": "^4.4.0",
     "jsonwebtoken": "^9.0.2",
